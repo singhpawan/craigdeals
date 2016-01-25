@@ -9,7 +9,6 @@ oauthlib==0.6.1
 pandas==0.17.1
 pandasql==0.6.3
 psycopg2==2.6
-python-apt===0.9.3.11build1
 python-dateutil==2.4.2
 scikit-learn==0.15.1
 scipy==0.14.1

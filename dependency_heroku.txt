@@ -1,0 +1,1 @@
+heroku buildpacks:add https://github.com/kennethreitz/conda-buildpack.git

@@ -1,1 +1,2 @@
-heroku buildpacks:add https://github.com/kennethreitz/conda-buildpack.git
+heroku buildpacks:set https://github.com/thenovices/heroku-buildpack-scipy
+

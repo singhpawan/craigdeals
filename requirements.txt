@@ -1,10 +1,7 @@
 beautifulsoup4==4.3.2
-decorator==3.4.0
 Flask==0.10.1
-ggplot==0.6.8
 html5lib==0.999
 ipython==2.3.0
-MarkupSafe==0.23
 matplotlib==1.4.2
 numpy==1.10.4
 pandas==0.17.1

@@ -19,7 +19,6 @@ pandasql==0.6.3
 psycopg2==2.6
 requests==2.4.3
 scikit-learn==0.15.1
-scipy==0.14.1
 simplejson==3.6.5
 urllib3==1.9.1
 virtualenv==14.0.1

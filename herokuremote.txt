@@ -1,3 +1,0 @@
-Creating app... done, stack is cedar-14
-https://cryptic-retreat-48699.herokuapp.com/ | https://git.heroku.com/cryptic-retreat-48699.git
-

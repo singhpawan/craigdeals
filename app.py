@@ -27,7 +27,7 @@ def data_func():
     conn = psycopg2.connect(
         user="smqdidhwgocwmg",
         password="qRi2N64egyMRyHAN9tiQ42Bd0y",
-        host="ec2-54-225-195-249.compute-1.amazonaws.com:5432"
+        host="ec2-54-225-195-249.compute-1.amazonaws.com:5432",
         database="dbjjk6gfc81mbh")
     if not conn:
         print "connection object not good"

@@ -39,8 +39,8 @@ def data_func():
     """with engine.connect() as conn:
         data = conn.execute(cmd)"""
     #data = cur.fetchall()
-    data = connection.execute(cmd)
-    connection.close()
+    cur = engine.execute(cmd)
+    data = cur.fetchall()
     return jsonify(items=list(data))
 
 

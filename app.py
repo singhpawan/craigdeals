@@ -41,7 +41,8 @@ def data_func():
     #data = cur.fetchall()
     cur = engine.execute(cmd)
     data = cur.fetchall()
-    return jsonify(items=list(data))
+    return data
+    #return jsonify(items=list(data))
 
 
 if __name__ == '__main__':

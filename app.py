@@ -5,6 +5,7 @@ from flask import Flask, jsonify, render_template
 import psycopg2
 import psycopg2.extras
 import sys
+from sqlalchemy import create_engine
 
 engine = create_engine('postgres://smqdidhwgocwmg:qRi2N64egyMRyHAN9tiQ42Bd0y@ec2-54-225-195-249.compute-1.amazonaws.com:5432/dbjjk6gfc81mbh')
 

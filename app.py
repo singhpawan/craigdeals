@@ -1,8 +1,7 @@
 #!/usr/bin/env python
 
 from flask import Flask, jsonify, render_template
-import MySQLdb
-import MySQLdb.cursors
+
 import psycopg2
 import psycopg2.extras
 
@@ -36,5 +35,5 @@ def data_func():
 
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0')
+    app.run()
 

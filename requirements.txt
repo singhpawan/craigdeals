@@ -1,6 +1,5 @@
 beautifulsoup4==4.3.2
 brewer2mpl==1.4.1
-dirspec==13.10
 Flask==0.10.1
 html5lib==0.999
 ipython==2.3.0

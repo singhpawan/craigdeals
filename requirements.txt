@@ -10,7 +10,6 @@ pandas==0.17.1
 pandasql==0.6.3
 psycopg2==2.6
 pyOpenSSL==0.13.1
-pysqlite==2.6.3
 python-dateutil==2.4.2
 requests==2.4.3
 scikit-learn==0.15.1

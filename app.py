@@ -29,12 +29,12 @@ def data_func():
         database="dbjjk6gfc81mbh")
     if not conn:
         print "connection object not good"
-    cur = conn.cursor(cursor_factory = psycopg2.extras.RealDictCursor)
+    #cur = conn.cursor(cursor_factory = psycopg2.extras.RealDictCursor)
     cmd = "SELECT * FROM priced WHERE date in (SELECT * FROM (SELECT date FROM priced WHERE model in ('accord', 'civic', 'camry', 'corolla') ORDER BY date) as t) ORDER BY delta DESC;"
 
-    cur.execute(cmd)
+    #cur.execute(cmd)
     data = engine.execute(cmd)
-    data = cur.fetchall()
+    #data = cur.fetchall()
     return jsonify(items=list(data))
 
 

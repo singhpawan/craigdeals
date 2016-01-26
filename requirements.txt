@@ -3,6 +3,7 @@ brewer2mpl==1.4.1
 Flask==0.10.1
 html5lib==0.999
 ipython==2.3.0
+gunicorn==19.4.5
 matplotlib==1.4.2
 numpy==1.10.4
 pandas==0.17.1

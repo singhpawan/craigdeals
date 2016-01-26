@@ -1,4 +1,4 @@
-#!/home/pawan/craigcardeals/venv/bin/python
+#!/home/pawan/craigdeals/venv/bin/python
 
 import sys
 import getopt

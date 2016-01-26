@@ -6,7 +6,7 @@ import MySQLdb.cursors
 import psycopg2
 import psycopg2.extras
 
-#engine = create_engine('postgresql+psycopg2://pawan:123@localhost/carsdb')
+#engine = create_engine('postgres://smqdidhwgocwmg:qRi2N64egyMRyHAN9tiQ42Bd0y@ec2-54-225-195-249.compute-1.amazonaws.com:5432/dbjjk6gfc81mbh')
 
 
 app = Flask(__name__)
@@ -24,9 +24,9 @@ def about():
 @app.route('/data', methods=['GET'])
 def data_func():
     conn = psycopg2.connect(
-        user="pawan",
-        password="123",
-        database="carsdb")
+        user="smqdidhwgocwmg",
+        password="qRi2N64egyMRyHAN9tiQ42Bd0y",
+        database="dbjjk6gfc81mbh")
     cur = conn.cursor(cursor_factory = psycopg2.extras.RealDictCursor)
     cmd = "SELECT * FROM priced WHERE date in (SELECT * FROM (SELECT date FROM priced WHERE model in ('accord', 'civic', 'camry', 'corolla') ORDER BY date) as t) ORDER BY delta DESC;"
 

@@ -4,7 +4,6 @@ from bs4 import BeautifulSoup
 import urllib2
 import re
 import pickle
-import MySQLdb
 import json
 from pandas import DataFrame, Series
 from pandas.io import sql
@@ -19,7 +18,7 @@ import numpy as np
 import re
 import psycopg2
 from sqlalchemy import create_engine
-engine = create_engine('postgresql://pawan:123@localhost/car')
+engine = create_engine('postgres://smqdidhwgocwmg:qRi2N64egyMRyHAN9tiQ42Bd0y@ec2-54-225-195-249.compute-1.amazonaws.com:5432/dbjjk6gfc81mbh')
 
   
 

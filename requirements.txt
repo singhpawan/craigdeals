@@ -5,7 +5,7 @@ html5lib==0.999
 ipython==2.3.0
 gunicorn==19.4.5
 matplotlib==1.4.2
-numpy==1.10.4
+numpy==1.9.0
 pandas==0.17.1
 pandasql==0.6.3
 psycopg2==2.6

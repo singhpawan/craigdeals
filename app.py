@@ -25,24 +25,21 @@ def about():
 
 @app.route('/data', methods=['GET'])
 def data_func():
-    """conn = psycopg2.connect(
+    conn = psycopg2.connect(
         user="smqdidhwgocwmg",
         password="qRi2N64egyMRyHAN9tiQ42Bd0y",
-        host="ec2-54-225-195-249.compute-1.amazonaws.com:5432",
-        database="dbjjk6gfc81mbh")"""
-    if not engine:
+        host="ec2-54-225-195-249.compute-1.amazonaws.com",
+        database="dbjjk6gfc81mbh")
+    if not conn:
         print "connection object not good"
-    #cur = conn.cursor(cursor_factory = psycopg2.extras.RealDictCursor)
+    cur = conn.cursor(cursor_factory = psycopg2.extras.RealDictCursor)
     cmd = "SELECT * FROM priced WHERE date in (SELECT * FROM (SELECT date FROM priced WHERE model in ('accord', 'civic', 'camry', 'corolla') ORDER BY date) as t) ORDER BY delta DESC;"
 
-    #cur.execute(cmd)
+    cur.execute(cmd)
     """with engine.connect() as conn:
         data = conn.execute(cmd)"""
-    #data = cur.fetchall()
-    cur = engine.execute(cmd)
     data = cur.fetchall()
-    return data
-    #return jsonify(items=list(data))
+    return jsonify(items=list(data))
 
 
 if __name__ == '__main__':

@@ -17,6 +17,14 @@ The entries tend to contain a lot of duplicate values and hence need to be remov
 * The backend for this project when I started was in MySQL and when I decided to move it to Heroku and migrating my data from MySQL to PostGres created some hiccups, but all is good in the world now. I will share my learning on what to avoid the problems I faced.
 * Heroku does not allow you to make slug files larger than **300MB** and does not support scipy and has to be installed throught thiry party buildpack. The conda buildpack recommended at Heroku website will make the slug size larger than *300MB*. Choosing the right build pack is crucial. I found help by using the **https://github.com/thenovices/heroku-buildpack-scipy**. Hope this helps.
 
+#####**Technology Stack**
+* **Backend**: Postgres,Python
+* **Fronend**: HTML, CSS, Javascript
+* **Visualizatoins**: d3.js
+* **Framework**: git, Flask, Heroku
+
+#####**Files**:
+
 
 
 

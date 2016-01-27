@@ -1,2 +1,0 @@
-heroku buildpacks:set https://github.com/thenovices/heroku-buildpack-scipy
-

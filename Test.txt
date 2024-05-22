@@ -1,0 +1,7 @@
+As part of the organizational separation between FIS and Worldpay, we need to develop a comprehensive separation strategy for the Snowflake accounts. This strategy involves determining the optimal approach for splitting the Snowflake accounts, specifically whether to transfer the existing account to Worldpay and have FIS establish a new account, or vice versa. Our analysis will consider all relevant factors, including technical, operational, and financial implications, to ensure a well-informed and strategic decision.
+
+
+
+
+
+

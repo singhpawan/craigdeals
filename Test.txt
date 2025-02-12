@@ -1,7 +1,11 @@
-As part of the organizational separation between FIS and Worldpay, we need to develop a comprehensive separation strategy for the Snowflake accounts. This strategy involves determining the optimal approach for splitting the Snowflake accounts, specifically whether to transfer the existing account to Worldpay and have FIS establish a new account, or vice versa. Our analysis will consider all relevant factors, including technical, operational, and financial implications, to ensure a well-informed and strategic decision.
 
 
 
 
+Thanks for confirming the us-east and us-west-3 regions for our landing zones.
 
+As you know, Snowflake doesn't currently support these regions.  Choosing different regions for other services raises potential concerns around data transfer latency/costs, increased integration complexity, and operational overhead.
 
+To help us understand the decision, could you share the rationale behind selecting us-east and us-west-3?  We'd appreciate insights into the key factors considered, such as cost optimization, specific service availability, or other relevant criteria.
+
+We'll also reach out to Snowflake to get their input on potential alternatives and will then work with your team to identify the best regions for the overall platform.  Happy to jump on a call to discuss this further and plan next steps accordingly.  Just let me know what time works best.

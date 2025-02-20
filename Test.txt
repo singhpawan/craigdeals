@@ -97,4 +97,4 @@ Ultimately, the decision depends on your specific needs and priorities. Carefull
 
 
 
-https://docs.google.com/spreadsheets/d/e/2PACX-1vTacumMAldVfwav6xFbPVOakNmUX93qhyFmU71_8XQ1buDTi8jxWtT0i2by8GeTJv-EtZam4xMT45U4/pubhtml
+https://docs.google.com/spreadsheets/d/e/2PACX-1vTacumMAldVfwav6xFbPVOakNmUX93qhyFmU71_8XQ1buDTi8jxWtT0i2by8GeTJv-EtZam4xMT45U4/pub?gid=939544386&single=true&output=csv

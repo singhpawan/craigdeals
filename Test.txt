@@ -93,3 +93,8 @@ Centralized Metadata: Even with separate accounts, you should still have a centr
 Future-Proofing: Consider how your data platform might evolve in the future. Separate accounts provide greater flexibility to accommodate new technologies, use cases, and organizational changes.
 By carefully considering these additional factors, you can make a more informed decision about your Snowflake account strategy. Remember that the best approach is the one that aligns with your organization's specific needs, priorities, and long-term data strategy.  
 Ultimately, the decision depends on your specific needs and priorities. Carefully weigh the trade-offs between simplicity and security, and choose the approach that best aligns with your organization's risk tolerance and data governance requirements.
+
+
+
+
+https://docs.google.com/spreadsheets/d/e/2PACX-1vTacumMAldVfwav6xFbPVOakNmUX93qhyFmU71_8XQ1buDTi8jxWtT0i2by8GeTJv-EtZam4xMT45U4/pubhtml

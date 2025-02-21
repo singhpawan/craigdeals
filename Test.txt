@@ -19,6 +19,11 @@ https://www.databricks.com/sites/default/files/2023-08/databricks-shared-respons
 
 https://blog.cloudflare.com/landscape-of-api-traffic/#:~:text=APIs%20account%20for%20more%20than,fast%20as%20traditional%20web%20traffic.
 
+API calls represent 83 percent of web traffic, according to an October 2018 Akamai traffic review detailed in the report
+
+https://www.akamai.com/newsroom/press-release/state-of-the-internet-security-retail-attacks-and-api-traffic#:~:text=API%20calls%20represent%2083%20percent,review%20detailed%20in%20the%20report.
+
+
 
 
 

@@ -1,18 +1,34 @@
-SELECT
-    EVENT_TIMESTAMP,
-    USER_NAME,
-    CLIENT_IP,
-    ERROR_CODE,
-    ERROR_MESSAGE,
-    AUTHENTICATION_METHOD,
-    ROLE_NAME,
-    WAREHOUSE_NAME,
-    FIRST_AUTHENTICATION_FACTOR,
-    SECOND_AUTHENTICATION_FACTOR
-FROM
-    SNOWFLAKE.ACCOUNT_USAGE.AUTHENTICATION_HISTORY
-WHERE
-    USER_NAME = 'YOUR_SNOWFLAKE_USER' -- Replace with the actual username
-    AND EVENT_TIMESTAMP >= DATEADD(hour, -24, CURRENT_TIMESTAMP()) -- Look back 24 hours (adjust as needed)
-ORDER BY
-    EVENT_TIMESTAMP DESC;
+CREATE NETWORK POLICY TEMP_ALLOW_ALL
+  ALLOWED_IP_LIST = ('0.0.0.0/0'); -- Allows all IP addresses
+
+ALTER USER YOUR_SNOWFLAKE_USER SET NETWORK_POLICY = TEMP_ALLOW_ALL;
+
+-- Remove the temporary policy from the user
+ALTER USER YOUR_SNOWFLAKE_USER UNSET NETWORK_POLICY;
+
+-- or, assign the original network policy.
+ALTER USER YOUR_SNOWFLAKE_USER SET NETWORK_POLICY = YOUR_ORIGINAL_NETWORK_POLICY;
+
+-- Drop the temporary policy
+DROP NETWORK POLICY TEMP_ALLOW_ALL;
+
+
+---- Complete ---
+
+-- 1. Create the temporary allow-all policy
+CREATE NETWORK POLICY TEMP_ALLOW_ALL
+  ALLOWED_IP_LIST = ('0.0.0.0/0');
+
+-- 2. Assign the policy to the user
+ALTER USER YOUR_SNOWFLAKE_USER SET NETWORK_POLICY = TEMP_ALLOW_ALL;
+
+-- Perform your test connection from Datahub...
+
+-- 3. Remove the temporary policy after testing.
+ALTER USER YOUR_SNOWFLAKE_USER UNSET NETWORK_POLICY;
+
+-- or, assign the original network policy.
+--ALTER USER YOUR_SNOWFLAKE_USER SET NETWORK_POLICY = YOUR_ORIGINAL_NETWORK_POLICY;
+
+-- 4. Drop the temporary policy
+DROP NETWORK POLICY TEMP_ALLOW_ALL;

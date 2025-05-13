@@ -1,47 +1,8 @@
-When reports in ThoughtSpot running on Snowflake external tables, which are refreshed every 5 minutes from a Databricks Delta Lake, intermittently show data and at other times show no data, several potential reasons could be at play. These issues often revolve around the refresh mechanism, caching, metadata synchronization, and the inherent nature of external table queries.
+Hi Chris,
 
-Here are the potential reasons for this intermittent data visibility:
-
-**1. External Table Refresh Issues:**
-
-* **Incomplete or Failed Refreshes:** The `ALTER EXTERNAL TABLE ... REFRESH` command in Snowflake, which is necessary to update the metadata of the external table with the latest state of the Delta Lake, might be failing intermittently or taking longer than the 5-minute interval. If a refresh fails, the external table will point to an older or possibly empty state. If it takes too long, queries might hit the table before the refresh completes, leading to inconsistent views.
-* **Auto-Refresh Limitations for Delta Lake:** While Snowflake offers an `AUTO_REFRESH` feature for external tables, its reliability and support for Delta Lake sources, especially those involving event notifications from cloud storage, can be complex. The documentation suggests that for Delta Lake external tables, periodic manual execution of `ALTER EXTERNAL TABLE ... REFRESH` is often the more reliable approach. If relying on auto-refresh, issues with the event notification setup (e.g., on S3, Azure Blob Storage) or Snowflake's ability to process these notifications for Delta transaction log updates could cause inconsistencies. Transferring ownership of an external table can also disable auto-refresh.
-* **Concurrency of Refreshes and Queries:** If a ThoughtSpot query hits the external table precisely when Snowflake is updating its metadata (during the refresh process), the table might appear empty or in an inconsistent state. The refresh operation involves reading the Delta Lake transaction log and updating the list of Parquet files that constitute the current version of the table. This is not an instantaneous atomic switch for all querying purposes immediately.
-* **Delta Lake Transaction Log Interpretation:** Snowflake reads the Delta Lake transaction logs to determine the current active data files. Any delay or error in accessing or interpreting these log files (e.g., `_delta_log/*.json` and `*.checkpoint.parquet`) can lead to Snowflake's metadata not reflecting the true current state of the Delta table.
-
-**2. Caching Mechanisms:**
-
-* **ThoughtSpot Caching:** ThoughtSpot may have its own caching layers for data and metadata. If ThoughtSpot caches an empty or outdated result set from a previous query, it might serve this cached version even if the underlying Snowflake external table has since been updated.
-* **Snowflake Caching:** Snowflake itself employs various caching mechanisms, including result caching and warehouse data caching. While result caching is typically invalidated by underlying data changes, the interaction with external table refreshes might have nuances. If a query pattern repeats and previously returned no data, a cached result might be temporarily served.
-* **Browser/Client Caching:** The browser used to access ThoughtSpot might cache responses. Though less likely to be the sole cause for complete data disappearance, it can contribute to seeing stale data.
-
-**3. Delta Lake Operations and State:**
-
-* **Frequent Small Updates vs. Refresh Interval:** If the Delta Lake is being updated very frequently with small changes, the 5-minute refresh interval might sometimes catch the table in a state that appears empty or incomplete, especially if new data is written and old data is removed in separate transactions that fall across a refresh boundary in an unexpected way.
-* **`VACUUM` Operations in Delta Lake:** If `VACUUM` operations are run on the Delta Lake table to remove old, unreferenced data files, and if these operations are too aggressive or not coordinated with Snowflake refreshes, Snowflake might temporarily be unable to find files it expects if a refresh was based on a slightly older transaction log version. However, Delta Lake's `VACUUM` typically has retention periods to prevent issues with readers that are slightly behind.
-
-**4. Configuration and Setup Issues:**
-
-* **Incorrect External Table Definition:** Errors in the `CREATE EXTERNAL TABLE` statement, such as an incorrect `LOCATION` path to the Delta Lake files, issues with the `FILE_FORMAT` (though for Delta, Snowflake primarily uses `TABLE_FORMAT = 'DELTA'`), or problems with the storage integration, can lead to Snowflake being unable to read the data.
-* **Permissions and Access Control:** Issues with permissions on the underlying cloud storage (e.g., S3 bucket, Azure Data Lake Storage) where the Delta Lake files reside can prevent Snowflake from accessing the data files, leading to empty results. This could be intermittent if credentials or policies are being changed.
-* **Path or Stage Alterations:** If the URL for the referenced stage is modified after the external table was created (using `ALTER STAGE … SET URL`), existing external tables referencing that stage might become invalid or point to the wrong location until they are recreated or updated.
-
-**5. ThoughtSpot Query Behavior:**
-
-* **Query Timing:** As mentioned, if ThoughtSpot queries are executed exactly when a refresh is happening, this could lead to transient errors or empty results.
-* **Specific Query Constructs:** While less common, very complex queries or specific constructs in ThoughtSpot that translate to particular SQL against the external table might interact unexpectedly during or immediately after a refresh cycle.
-
-**Troubleshooting Steps to Consider:**
-
-1.  **Monitor External Table Refresh History:** Check Snowflake's query history for the `ALTER EXTERNAL TABLE ... REFRESH` commands. Verify their completion status, duration, and any error messages.
-2.  **Manual Refresh Verification:** Manually run `ALTER EXTERNAL TABLE ... REFRESH` and immediately query the table in Snowflake to see if the data appears as expected. Then check in ThoughtSpot.
-3.  **Examine Delta Table History:** Use Databricks to examine the Delta table's history and transaction log to ensure data is being committed as expected and that file paths are consistent.
-4.  **Review Cloud Storage Logs:** Check logs for the underlying cloud storage to see if Snowflake is attempting to access the files and if any permission errors are occurring.
-5.  **Test with Simpler Queries:** Use simple `SELECT COUNT(*)` or `SELECT * LIMIT 10` queries directly in Snowflake against the external table after a refresh to isolate whether the issue is with Snowflake's access or with ThoughtSpot's interpretation.
-6.  **Clear Caches:** Clear caches in ThoughtSpot (if possible through admin settings) and in the browser.
-7.  **Stagger Refreshes and Reporting:** If possible, ensure that report generation in ThoughtSpot does not coincide exactly with the scheduled external table refresh times.
-8.  **Increase Refresh Interval (for testing):** Temporarily increase the refresh interval to see if the problem becomes less frequent, which might point to issues with refresh duration or race conditions.
-9.  **Verify `TABLE_FORMAT = 'DELTA'`:** Ensure the external table is explicitly created with `TABLE_FORMAT = 'DELTA'`.
-10. **Check for `PATTERN` parameter:** Ensure no `PATTERN` parameter is used in the `CREATE EXTERNAL TABLE` statement, as it's not supported for Delta Lake external tables.
-
-By systematically investigating these areas, you should be able to pinpoint the cause of the intermittent data visibility in your ThoughtSpot reports.
+I'm requesting approval to attend the Snowflake Summit. I have attended the summit for the past two years has consistently used the learnings that we've implemented to enhance our data platform.  
+My goal will be to:
+* Identify and bring back 2-3 specific strategies that can directly improve our data operations, particularly in areas like cost optimization , AI and data governance within Snowflake.
+* Network with peers from leading organizations to understand their approaches to common challenges and benchmark our practices.
+* Attend technical deep-dive sessions and hands-on labs to gain practical knowledge on new Snowflake features and best practices relevant to our current and future projects. 
+I believe this will be a good learning opportunity and will deliver a strong ROI through optimized platform performance, new capabilities, and ensuring we are leveraging best-in-class data strategies.

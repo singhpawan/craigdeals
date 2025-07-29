@@ -1,14 +1,104 @@
-New Platform Buildout: Snowflake Accounts
-We've made significant strides in our new platform buildout. All Snowflake accounts for the new platform are now created and hardened, providing a secure and robust foundation for future data initiatives.
+-- Connect to your Snowflake account using SnowSQL or Web UI
+USE ROLE ACCOUNTADMIN;
 
-Wordplay TSA Exit: Accelerating Independence
-The Wordplay TSA exit is moving full steam ahead! We're currently ahead of schedule, with final sign-off and organizational account transfer expected soon. This brings us closer to full operational independence.
+-- Get the PrivateLink account URL (this is the value for SNOWFLAKE_RESOURCE_ALIAS in Azure)
+SELECT KEY, VALUE FROM TABLE(FLATTEN(INPUT => PARSE_JSON(SYSTEM$GET_PRIVATELINK_CONFIG())));
 
-RBAC Rationalization: Enhanced Security and Efficiency
-We're excited to announce an 8x reduction in RBAC roles, creating a leaner, more secure environment. This rationalization is designed to empower self-service capabilities while significantly enhancing our overall security posture.
 
-Successful Emerald Use Cases: Driving Business Impact
-Our Emerald platform is proving its value with successful use cases now live across key areas. These include Wealth, Systematics, Horizon 360, and GBC Bank, demonstrating Emerald's versatility and its ability to deliver tangible results.
+. Configure Snowflake Network Policies
 
-New Platform SF Network Connectivity Topology: Simplified & Secure
-We've successfully implemented a simplified and secure hub-spoke network topology for our new platform's network connectivity. This design enhances both security and manageability, ensuring robust and efficient data flow.
+To ensure that only traffic coming through PrivateLink can access your Snowflake account, you should configure network policies.
+
+Using Snowflake SQL:
+
+-- Create a network policy to allow access only from your VNet's egress IP range
+-- You need to know the public egress IP of your VNet if you are using a NAT Gateway or similar.
+-- If all traffic is strictly private, you might not need to specify IP ranges here,
+-- but it's good practice to restrict access.
+CREATE NETWORK POLICY my_privatelink_policy
+    ALLOWED_IP_LIST = ('<your_vnet_egress_public_ip_range>'); -- Replace with your VNet's public egress IP range if applicable
+
+-- If you want to restrict access to only PrivateLink, and you have no public egress IP for your VNet,
+-- you might need to allow the Snowflake PrivateLink IP range (contact Snowflake support for this)
+-- or rely solely on the PrivateLink connection.
+
+-- Activate the network policy for your account
+ALTER ACCOUNT SET NETWORK_POLICY = my_privatelink_policy;
+
+-- Verify the network policy
+SHOW PARAMETERS LIKE 'NETWORK_POLICY' FOR ACCOUNT;
+
+Important: If you want to strictly enforce PrivateLink and block all public access, ensure your ALLOWED_IP_LIST only contains the necessary private IPs or ranges that Snowflake provides for PrivateLink, or the egress IPs of your VNet when connecting through PrivateLink. Consult Snowflake documentation or support for the exact IP ranges if needed.
+
+Validation Steps
+After configuring both Azure and Snowflake, perform these validation steps:
+
+1. Test Connectivity from Azure VNet
+
+From a VM or resource within the Azure VNet connected to the Private Endpoint:
+
+Ping Test (DNS Resolution):
+
+ping <your_account_locator>.privatelink.snowflakecomputing.com
+
+Verify that the ping resolves to the private IP address of your Azure Private Endpoint.
+
+Telnet/Netcat Test (Port 443):
+
+telnet <your_account_locator>.privatelink.snowflakecomputing.com 443
+
+You should see a successful connection (e.g., "Connected to..."). If it hangs or shows "Connection refused," there's a network issue.
+
+2. Test Snowflake Connection
+
+Attempt to connect to Snowflake using your PrivateLink URL.
+
+Using SnowSQL:
+
+snowsql -a <your_account_locator>.privatelink -u <your_username>
+
+For example: snowsql -a ab12345.privatelink -u myuser
+
+Using JDBC/ODBC/Python Connector:
+Ensure your connection string uses the PrivateLink URL:
+jdbc:snowflake://<your_account_locator>.privatelink.snowflakecomputing.com/?user=<username>&password=<password>
+
+Example Python:
+
+import snowflake.connector
+
+ctx = snowflake.connector.connect(
+    user='<your_username>',
+    password='<your_password>',
+    account='<your_account_locator>.privatelink',
+    # ocsp_fail_open=True # Consider this for OCSP issues if they arise
+)
+cs = ctx.cursor()
+try:
+    cs.execute("SELECT CURRENT_VERSION()")
+    one_row = cs.fetchone()
+    print(one_row[0])
+finally:
+    cs.close()
+ctx.close()
+
+Validation:
+
+A successful connection indicates that PrivateLink is working correctly.
+
+If you configured a network policy, try connecting from an IP address outside your allowed list. The connection should fail.
+
+Troubleshooting Tips
+DNS Resolution: The most common issue. Ensure your Private DNS Zone is correctly configured and linked to your VNet, and that the A records point to the Private Endpoint's IP. Use nslookup from within the VNet.
+
+Private Endpoint Connection Status: In Azure Portal, check the Private Endpoint's "Connection status." If it's "Pending" or "Rejected," there might be an issue with the Snowflake resource ID/alias or a misconfiguration on the Snowflake side.
+
+Network Security Groups (NSGs): Ensure no NSGs are blocking traffic between your VNet's subnet and the Private Endpoint.
+
+Snowflake Network Policy: Verify your Snowflake network policy is correctly configured and applied. If it's too restrictive, it might block valid PrivateLink connections.
+
+Firewall: Check any on-premise firewalls or network appliances if you are connecting from an on-premise network peered with Azure.
+
+OCSP Issues: If you encounter certificate validation errors, ensure OCSP (Online Certificate Status Protocol) traffic is allowed. Snowflake's PrivateLink documentation should provide details on OCSP URLs/IPs. You might need to add an A record for ocsp.snowflakecomputing.com in your Private DNS Zone pointing to the correct IP.
+
+Snowflake Support: If all else fails, contact Snowflake support with details of your configuration and error messages.

@@ -1,104 +1,197 @@
--- Connect to your Snowflake account using SnowSQL or Web UI
-USE ROLE ACCOUNTADMIN;
+Of the two architectures, the **Private Link-only approach is the recommended solution**. It offers superior security and eliminates IP address conflicts, which are critical for a scalable, multi-tenant "stamp" deployment model, despite its higher cost and complexity regarding source IP preservation.
 
--- Get the PrivateLink account URL (this is the value for SNOWFLAKE_RESOURCE_ALIAS in Azure)
-SELECT KEY, VALUE FROM TABLE(FLATTEN(INPUT => PARSE_JSON(SYSTEM$GET_PRIVATELINK_CONFIG())));
+---
+
+## **ADR: Azure Stamp to Snowflake Connectivity**
+
+This Architectural Decision Record (ADR) outlines the decision for network connectivity from Azure application "stamps" to a central Snowflake account.
+
+* **Status**: Decided
+* **Date**: 2025-08-08
+* **Decision Maker**: Network Engineering Team
+
+---
+
+### **Context and Problem Statement**
+
+We require a standardized, secure, and scalable network architecture to connect numerous application environments, referred to as "stamps," to a centralized Snowflake data warehouse. Each stamp resides in its own Azure Virtual Network (VNet). The connectivity must be routed through a central hub VNet which contains a transparent proxy for traffic inspection and logging. The final hop from the hub VNet to Snowflake must use Azure Private Link for maximum security.
+
+The core decision point is the method used to connect each **spoke VNet (the stamp) to the central hub VNet**.
+
+### **Decision Drivers**
+
+* **Security**: The solution must adhere to zero-trust principles, ensuring network isolation and preventing lateral movement.
+* **Scalability & IP Management**: The architecture must scale to hundreds of stamps without creating operational overhead from IP address space conflicts.
+* **Cost**: The solution should be cost-effective regarding both Azure service fees and data transfer.
+* **Ease of Integration**: The process of onboarding a new stamp should be simple and repeatable.
+* **Operational Simplicity**: The solution should be straightforward to manage, especially concerning traffic logging and troubleshooting (e.g., source IP preservation).
+
+---
+
+### **Considered Options**
+
+Two options based on a hub-and-spoke topology were considered. The connection from the hub to Snowflake is consistently via Private Link in both scenarios.
+
+#### **Option 1: Exclusive Private Link Connectivity**
+
+In this model, each spoke VNet (stamp) connects to the transparent proxy service in the hub VNet using a **Private Endpoint**. The proxy service is exposed via a Private Link Service (PLS) fronted by an Internal Load Balancer (ILB).
+
+*Traffic Flow*: `Stamp App -> Private Endpoint (Spoke) -> PLS/ILB (Hub) -> Proxy (Hub) -> Private Endpoint (Hub) -> Snowflake`
 
 
-. Configure Snowflake Network Policies
 
-To ensure that only traffic coming through PrivateLink can access your Snowflake account, you should configure network policies.
+---
 
-Using Snowflake SQL:
+#### **Option 2: Mixed Model (VNet Peering & Private Link)**
 
--- Create a network policy to allow access only from your VNet's egress IP range
--- You need to know the public egress IP of your VNet if you are using a NAT Gateway or similar.
--- If all traffic is strictly private, you might not need to specify IP ranges here,
--- but it's good practice to restrict access.
-CREATE NETWORK POLICY my_privatelink_policy
-    ALLOWED_IP_LIST = ('<your_vnet_egress_public_ip_range>'); -- Replace with your VNet's public egress IP range if applicable
+In this model, each spoke VNet (stamp) is connected to the hub VNet using **VNet Peering**. Traffic from the stamp is then routed directly to the internal IP of the transparent proxy's ILB in the hub.
 
--- If you want to restrict access to only PrivateLink, and you have no public egress IP for your VNet,
--- you might need to allow the Snowflake PrivateLink IP range (contact Snowflake support for this)
--- or rely solely on the PrivateLink connection.
+*Traffic Flow*: `Stamp App -> VNet Peering -> ILB (Hub) -> Proxy (Hub) -> Private Endpoint (Hub) -> Snowflake`
 
--- Activate the network policy for your account
-ALTER ACCOUNT SET NETWORK_POLICY = my_privatelink_policy;
+**Note**: The prompt mentioned "Service Endpoint," which is typically used to secure access from a VNet to Azure PaaS services (like Azure SQL or Storage). For VNet-to-VNet connectivity to a custom service (the proxy), **VNet Peering** is the correct corresponding pattern. This option is analyzed as using VNet Peering.
 
--- Verify the network policy
-SHOW PARAMETERS LIKE 'NETWORK_POLICY' FOR ACCOUNT;
 
-Important: If you want to strictly enforce PrivateLink and block all public access, ensure your ALLOWED_IP_LIST only contains the necessary private IPs or ranges that Snowflake provides for PrivateLink, or the egress IPs of your VNet when connecting through PrivateLink. Consult Snowflake documentation or support for the exact IP ranges if needed.
 
-Validation Steps
-After configuring both Azure and Snowflake, perform these validation steps:
+---
 
-1. Test Connectivity from Azure VNet
+### **Decision Outcome**
 
-From a VM or resource within the Azure VNet connected to the Private Endpoint:
+**Chosen Option:** Option 1: Exclusive Private Link Connectivity.
 
-Ping Test (DNS Resolution):
+This decision prioritizes security and long-term scalability over cost and initial operational simplicity.
 
-ping <your_account_locator>.privatelink.snowflakecomputing.com
+#### **Tradeoff Analysis**
 
-Verify that the ping resolves to the private IP address of your Azure Private Endpoint.
+| **Criteria** | **Option 1: Private Link (Winner)** 🏆 | **Option 2: VNet Peering** |
+| :--- | :--- | :--- |
+| **Security** | **Excellent**. Provides true network isolation. The connection is unidirectional (spoke-to-hub) and exposes only the specific proxy service. A compromise in the hub cannot spread to the spokes. | **Good**. Provides network-level connectivity. By default, peering is bidirectional, increasing the attack surface. Requires careful Network Security Group (NSG) rules to restrict traffic. Higher risk of lateral movement. |
+| **Scalability & IP Mgmt.** | **Excellent**. Completely eliminates IP address conflicts. Each stamp VNet can use overlapping IP CIDR blocks (e.g., `10.1.0.0/16`) without issue. This is a massive advantage for a scalable stamp model. | **Poor**. Requires strict, centralized IP address management. Every new stamp VNet must have a unique IP CIDR block that does not overlap with the hub or any other peered spoke. This becomes a significant operational bottleneck at scale. |
+| **Cost** 💰 | **Higher**. Incurs hourly charges for each Private Endpoint and, more significantly, a per-GB data processing fee. `Cost = N * (PE_hourly) + Total_GB_processed`. | **Lower**. Incurs per-GB ingress/egress data transfer charges across peering links, which are generally cheaper than Private Link's processing fees. No hourly cost for the peering itself. |
+| **Source IP Preservation** | **Complex**. The source IP address seen by the proxy is a NAT'd IP from the Private Link Service's address range, **not** the original client IP. Preserving the original source IP requires enabling **Proxy Protocol v2** on the PLS, which must be supported by the transparent proxy. | **Simple**. The original client source IP from the stamp is preserved across the VNet peering link. This greatly simplifies logging, auditing, and applying source-based security policies on the proxy. |
+| **Ease of Integration** | **Moderate**. Requires creating a Private Endpoint and managing its DNS record in a Private DNS Zone. The connection is an approval workflow (consumer requests, provider approves). | **Moderate**. Requires creating a VNet peering link, which must be approved from both sides. The main challenge is securing a non-overlapping IP range beforehand. |
 
-Telnet/Netcat Test (Port 443):
+### **Consequences of the Decision**
 
-telnet <your_account_locator>.privatelink.snowflakecomputing.com 443
+* **Positive:**
+    * **Enhanced Security Posture**: We achieve superior network isolation, aligning with zero-trust security principles.
+    * **Future-Proof Scalability**: We can onboard new application stamps independently without the risk of IP address conflicts, removing a major operational hurdle.
+    * **Simplified Governance**: The architecture enforces a clean separation of duties; stamp teams do not need visibility into the hub's network layout, and vice-versa.
 
-You should see a successful connection (e.g., "Connected to..."). If it hangs or shows "Connection refused," there's a network issue.
+* **Negative / To Be Mitigated:**
+    * **Increased Costs**: We accept the higher costs associated with Private Link data processing and per-endpoint fees. This must be factored into our cloud budget.
+    * **Proxy Configuration Complexity**: We must ensure our transparent proxy solution fully supports Proxy Protocol v2 to preserve the original client IP address for logging and security purposes. This will be a mandatory requirement for the proxy technology selection.
+    * **DNS Management**: A robust process for managing Private DNS Zones for the endpoints is required.
 
-2. Test Snowflake Connection
+In Azure networking, **PLS** and an **ILB hub** are components that work together to provide secure, private access to your services. Here’s a breakdown of each concept.
 
-Attempt to connect to Snowflake using your PrivateLink URL.
+### **PLS (Private Link Service)**
 
-Using SnowSQL:
+A **Private Link Service (PLS)** is the service you create to make your own application, running in your own Azure Virtual Network (VNet), available to other consumers privately. Think of it as creating your own private "version" of an Azure PaaS service (like Azure SQL or Azure Storage) that others can connect to without ever exposing your service to the public internet.
 
-snowsql -a <your_account_locator>.privatelink -u <your_username>
+The core components are:
 
-For example: snowsql -a ab12345.privatelink -u myuser
+  * **Provider**: You, the owner of the service.
+  * **Service**: The application you want to share (e.g., a web API, a database).
+  * **Consumer**: Another VNet, perhaps belonging to a different team or even a different company, that needs to access your service.
 
-Using JDBC/ODBC/Python Connector:
-Ensure your connection string uses the PrivateLink URL:
-jdbc:snowflake://<your_account_locator>.privatelink.snowflakecomputing.com/?user=<username>&password=<password>
+The PLS acts as a reference to your service. A consumer creates a **Private Endpoint** in their own VNet, which then requests a connection to your PLS. Once you approve it, traffic flows from the consumer's VNet directly to your service over Microsoft's private backbone network.
 
-Example Python:
+-----
 
-import snowflake.connector
+### **ILB (Internal Load Balancer)**
 
-ctx = snowflake.connector.connect(
-    user='<your_username>',
-    password='<your_password>',
-    account='<your_account_locator>.privatelink',
-    # ocsp_fail_open=True # Consider this for OCSP issues if they arise
-)
-cs = ctx.cursor()
-try:
-    cs.execute("SELECT CURRENT_VERSION()")
-    one_row = cs.fetchone()
-    print(one_row[0])
-finally:
-    cs.close()
-ctx.close()
+An **Internal Load Balancer (ILB)** is an Azure service that distributes network traffic to a set of backend resources (like virtual machines) *within* a virtual network. Unlike a public load balancer that has a public IP and accepts traffic from the internet, an ILB only has a private IP address from its VNet.
 
-Validation:
+Key characteristics of an ILB:
 
-A successful connection indicates that PrivateLink is working correctly.
+  * **Private IP Only**: It's not exposed to the public internet.
+  * **High Availability**: It ensures your internal applications are resilient by distributing traffic among healthy virtual machines.
+  * **Layer 4**: It operates at the transport layer, routing traffic based on TCP/UDP ports and IP addresses.
 
-If you configured a network policy, try connecting from an IP address outside your allowed list. The connection should fail.
+-----
 
-Troubleshooting Tips
-DNS Resolution: The most common issue. Ensure your Private DNS Zone is correctly configured and linked to your VNet, and that the A records point to the Private Endpoint's IP. Use nslookup from within the VNet.
+### **How They Create an "ILB Hub"**
 
-Private Endpoint Connection Status: In Azure Portal, check the Private Endpoint's "Connection status." If it's "Pending" or "Rejected," there might be an issue with the Snowflake resource ID/alias or a misconfiguration on the Snowflake side.
+The term "ILB hub" refers to a common architecture, typically in a [hub-and-spoke network topology](https://learn.microsoft.com/en-us/azure/architecture/reference-architectures/hybrid-networking/hub-spoke), where an ILB is used as the central point for exposing a shared service.
 
-Network Security Groups (NSGs): Ensure no NSGs are blocking traffic between your VNet's subnet and the Private Endpoint.
+Here's how **PLS** and an **ILB** work together in this model:
 
-Snowflake Network Policy: Verify your Snowflake network policy is correctly configured and applied. If it's too restrictive, it might block valid PrivateLink connections.
+1.  **Service Hosting**: In the **hub VNet**, you deploy your shared application on a set of virtual machines (the backend pool).
+2.  **Internal Exposure**: You place an **Internal Load Balancer (ILB)** in front of these virtual machines. The ILB gets a private IP within the hub VNet (e.g., `10.0.1.100`) and distributes incoming traffic to your application VMs.
+3.  **Private Sharing**: To share this internal service securely with consumers in other VNets (the "spokes"), you create a **Private Link Service (PLS)** and associate it with the frontend IP configuration of the **ILB**.
+4.  **Consumer Connection**: A consumer in a spoke VNet creates a Private Endpoint, which connects to your PLS. This effectively maps a private IP in the spoke VNet directly to your ILB in the hub VNet.
 
-Firewall: Check any on-premise firewalls or network appliances if you are connecting from an on-premise network peered with Azure.
+This "ILB Hub" architecture allows you to offer a shared, load-balanced service that is completely isolated from the internet and can be securely consumed by multiple other networks without complex VNet peering or concerns about overlapping IP addresses.
 
-OCSP Issues: If you encounter certificate validation errors, ensure OCSP (Online Certificate Status Protocol) traffic is allowed. Snowflake's PrivateLink documentation should provide details on OCSP URLs/IPs. You might need to add an A record for ocsp.snowflakecomputing.com in your Private DNS Zone pointing to the correct IP.
+This video explains how to securely provide services from within your private network using these technologies.
+\<br\>
+[](https://www.youtube.com/watch?v=h8od9fZKzRg "Azure Private Link Service Explained")
+http://googleusercontent.com/youtube_content/0
 
-Snowflake Support: If all else fails, contact Snowflake support with details of your configuration and error messages.
+
+Yes, **User-Defined Routes (UDRs) play a critical and mandatory role** in both architectures.
+
+Their primary function is to override Azure's default routing behavior to force traffic through the **transparent proxy** for inspection, logging, and policy enforcement. Without UDRs, traffic would bypass the proxy, defeating its purpose.
+
+Here’s how UDRs are applied in each scenario.
+
+---
+
+### **The Fundamental Role of the UDR**
+
+A UDR is essentially a custom rule you add to a subnet's route table. It tells network traffic:
+
+> "If you are trying to reach destination `X`, instead of following the default path, you **must** go to next-hop address `Y` first."
+
+In our architectures, the "next-hop address `Y`" is always the private IP of the **transparent proxy's Internal Load Balancer (ILB)** in the hub VNet.
+
+
+
+---
+
+### **UDR in Option 2 (VNet Peering Model)**
+
+This is the most straightforward use case for a UDR.
+
+* **Where is the UDR applied?**
+    On the application **subnet within the spoke VNet**.
+* **What does it do?**
+    When an application in the spoke tries to connect to Snowflake, its destination is the IP address of the Snowflake Private Endpoint in the hub. By default, Azure would route this traffic directly over the VNet peering. The UDR intercepts this.
+* **The UDR Rule:**
+    * **Address Prefix**: The IP address of the Snowflake Private Endpoint in the hub (e.g., `10.0.2.10/32`).
+    * **Next Hop Type**: `Virtual Appliance`.
+    * **Next Hop IP Address**: The private IP of the transparent proxy's ILB in the hub (e.g., `10.0.1.100`).
+
+This rule effectively forces all traffic from the spoke that is destined for Snowflake to be detoured through the central proxy.
+
+---
+
+### **UDR in Option 1 (Private Link Model)**
+
+The role of the UDR is slightly different here, and its placement shifts from the spoke to the hub.
+
+* **In the Spoke VNet:**
+    A UDR is **not needed in the spoke** for this specific flow. Traffic from the application is destined for the Private Endpoint *within its own VNet*. Azure's system routes automatically handle directing this traffic to the Private Link service without needing a UDR. This simplifies the configuration of the spoke VNet.
+
+* **Where is the UDR applied?**
+    On the **subnet where the transparent proxy resides within the hub VNet**. This is a crucial step.
+* **What does it do?**
+    1.  Traffic arrives at the proxy via the Private Link Service.
+    2.  The proxy inspects it and then forwards it to the final destination—the Snowflake Private Endpoint in the hub.
+    3.  A UDR is needed to ensure the proxy can correctly route traffic *back out* and to prevent routing loops. More importantly, it ensures that *any* traffic originating from within the hub and destined for Snowflake also goes through the proxy for consistent policy enforcement.
+* **The UDR Rule (on hub subnets):**
+    * **Address Prefix**: The IP address of the Snowflake Private Endpoint in the hub (e.g., `10.0.2.10/32`).
+    * **Next Hop Type**: `Virtual Appliance`.
+    * **Next Hop IP Address**: The private IP of the transparent proxy's ILB in the hub (e.g., `10.0.1.100`).
+    * **Important**: This UDR would be applied to all relevant subnets in the hub *except* the subnet containing the proxy itself, to prevent a routing loop where the proxy tries to send traffic to itself.
+
+---
+
+### **Summary of UDR Placement**
+
+| Architecture | UDR Location | Purpose |
+| :--- | :--- | :--- |
+| **Option 1 (Private Link)** | **Hub VNet** | Ensures traffic processed by the proxy (and other hub resources) is correctly routed to the final Snowflake PE. Simplifies the spoke. |
+| **Option 2 (VNet Peering)** | **Spoke VNet** | Hijacks traffic destined for Snowflake and forces it to the proxy in the hub for inspection. |
+
+In short, you can't build these architectures without UDRs. They are the "traffic cops" that enforce the path through your security appliance.

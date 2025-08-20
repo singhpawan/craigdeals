@@ -1,197 +1,122 @@
-Of the two architectures, the **Private Link-only approach is the recommended solution**. It offers superior security and eliminates IP address conflicts, which are critical for a scalable, multi-tenant "stamp" deployment model, despite its higher cost and complexity regarding source IP preservation.
+## Problem Statement: Automated Tag Propagation from Databricks to Snowflake
+Problem:
+There is a critical metadata gap between our Databricks lakehouse and Snowflake data warehouse. Business, operational, and sensitivity tags applied to data objects in Databricks Unity Catalog are not being propagated to their corresponding objects in Snowflake. This absence of synchronized metadata undermines our ability to enforce consistent data governance, manage security risks, and enable effective data discovery in our primary analytics environment. The current state creates an unscalable operational burden and prevents the uniform application of data policies across platforms.
 
----
+Objective:
+To design and implement a fully automated and scalable framework that ensures the reliable, timely, and accurate propagation of all metadata tags from Databricks to Snowflake.
 
-## **ADR: Azure Stamp to Snowflake Connectivity**
+Key Requirements:
 
-This Architectural Decision Record (ADR) outlines the decision for network connectivity from Azure application "stamps" to a central Snowflake account.
+Automation: The solution must be a zero-touch process, automatically handling the synchronization of tags for new, updated, or deleted tables, columns, and tags without any manual intervention.
 
-* **Status**: Decided
-* **Date**: 2025-08-08
-* **Decision Maker**: Network Engineering Team
+Scalability: The framework must perform efficiently and cost-effectively as the volume of data assets scales to thousands of tables and millions of tags.
 
----
+Timeliness: Tag changes in Databricks must be reflected in Snowflake within a defined, low-latency Service Level Agreement (SLA), targeting near real-time updates.
 
-### **Context and Problem Statement**
+Reliability: The system must be resilient, incorporating robust error handling, retry mechanisms, and proactive alerting to ensure data governance consistency is never compromised.
 
-We require a standardized, secure, and scalable network architecture to connect numerous application environments, referred to as "stamps," to a centralized Snowflake data warehouse. Each stamp resides in its own Azure Virtual Network (VNet). The connectivity must be routed through a central hub VNet which contains a transparent proxy for traffic inspection and logging. The final hop from the hub VNet to Snowflake must use Azure Private Link for maximum security.
 
-The core decision point is the method used to connect each **spoke VNet (the stamp) to the central hub VNet**.
 
-### **Decision Drivers**
 
-* **Security**: The solution must adhere to zero-trust principles, ensuring network isolation and preventing lateral movement.
-* **Scalability & IP Management**: The architecture must scale to hundreds of stamps without creating operational overhead from IP address space conflicts.
-* **Cost**: The solution should be cost-effective regarding both Azure service fees and data transfer.
-* **Ease of Integration**: The process of onboarding a new stamp should be simple and repeatable.
-* **Operational Simplicity**: The solution should be straightforward to manage, especially concerning traffic logging and troubleshooting (e.g., source IP preservation).
+----
 
----
 
-### **Considered Options**
+Product Requirements Document: Unified Data Tag Propagation
+1. Title: Enterprise-Wide Tag Synchronization Framework
 
-Two options based on a hub-and-spoke topology were considered. The connection from the hub to Snowflake is consistently via Private Link in both scenarios.
+2. Executive Summary
 
-#### **Option 1: Exclusive Private Link Connectivity**
+Our organization has successfully established a data flow from our Databricks lakehouse to the Snowflake data warehouse. However, we face a critical metadata disconnect: the business, operational, and sensitivity tags meticulously applied in Databricks Unity Catalog are lost when data lands in Snowflake. This gap breaks our data governance framework, exposes the company to significant compliance risk, and cripples data discovery. We propose the development of an automated, scalable, and resilient Tag Propagation Framework to ensure metadata consistency across our core data platforms, transforming them into a single, trustworthy data ecosystem.
 
-In this model, each spoke VNet (stamp) connects to the transparent proxy service in the hub VNet using a **Private Endpoint**. The proxy service is exposed via a Private Link Service (PLS) fronted by an Internal Load Balancer (ILB).
+3. User Personas & High-Level Stories
 
-*Traffic Flow*: `Stamp App -> Private Endpoint (Spoke) -> PLS/ILB (Hub) -> Proxy (Hub) -> Private Endpoint (Hub) -> Snowflake`
+Priya, Data Governance Lead: "As a governance lead, I need assurance that a table tagged as PII-Confidential in Databricks is identically tagged in Snowflake, so I can apply universal masking policies and access controls consistently, thereby minimizing our compliance risk."
 
+David, Data Engineer: "As a data engineer, I need the tag synchronization process to be fully automated and zero-touch. My team cannot afford the manual overhead of chasing metadata; we need to focus on building reliable data pipelines, not fixing metadata drift for hundreds of tables."
 
+Sarah, Senior Data Analyst: "As an analyst, I need to trust the data catalog in Snowflake. When I search for certified financial data, I need the finance-certified tag to be present and accurate so I can quickly find and use the right datasets for my revenue reports."
 
----
+Mark, Security Officer: "As a security officer, I need to audit access to sensitive data across all systems. Without consistent tags, I cannot generate a complete report, leaving us blind to potential security loopholes and unable to prove regulatory compliance."
 
-#### **Option 2: Mixed Model (VNet Peering & Private Link)**
+4. Problem Statement
 
-In this model, each spoke VNet (stamp) is connected to the hub VNet using **VNet Peering**. Traffic from the stamp is then routed directly to the internal IP of the transparent proxy's ILB in the hub.
+The current inability to propagate metadata tags from Databricks to Snowflake creates a fragmented and untrustworthy data environment with severe business consequences:
 
-*Traffic Flow*: `Stamp App -> VNet Peering -> ILB (Hub) -> Proxy (Hub) -> Private Endpoint (Hub) -> Snowflake`
+Critical Governance Gap: We operate with two conflicting sources of truth for metadata. This prevents the enforcement of consistent security policies (e.g., row-level security, column masking), leading to a high risk of data misuse and unauthorized access in our primary analytics platform.
 
-**Note**: The prompt mentioned "Service Endpoint," which is typically used to secure access from a VNet to Azure PaaS services (like Azure SQL or Storage). For VNet-to-VNet connectivity to a custom service (the proxy), **VNet Peering** is the correct corresponding pattern. This option is analyzed as using VNet Peering.
+Operational Inefficiency and Toil: Data engineering and governance teams are forced into error-prone, manual processes to replicate tags. This is not scalable and introduces significant delays in making data available for business use, directly impacting time-to-insight.
 
+Impeded Data Democratization: Our goal of enabling self-service analytics is undermined. Without reliable business and quality tags in Snowflake, data consumers cannot effectively discover, understand, or trust the data, leading to a reliance on overburdened central teams and a proliferation of data silos.
 
+Unscalable Architecture: As we scale our data ingestion from dozens to hundreds of sources, the manual metadata reconciliation workload will grow exponentially. This technical debt represents a fundamental blocker to the future growth and maturity of our enterprise data platform.
 
----
+5. Goals & Success Metrics
 
-### **Decision Outcome**
+The goal is to deliver a fully automated framework that guarantees tag consistency between Databricks and Snowflake.
 
-**Chosen Option:** Option 1: Exclusive Private Link Connectivity.
+Success Metrics:
 
-This decision prioritizes security and long-term scalability over cost and initial operational simplicity.
+Metadata Accuracy: Achieve >99.9% parity between Databricks UC tags and Snowflake tags within 1 hour of a change.
 
-#### **Tradeoff Analysis**
+Reduction in Manual Effort: Reduce manual ticketing and effort related to tag management by 100%.
 
-| **Criteria** | **Option 1: Private Link (Winner)** 🏆 | **Option 2: VNet Peering** |
-| :--- | :--- | :--- |
-| **Security** | **Excellent**. Provides true network isolation. The connection is unidirectional (spoke-to-hub) and exposes only the specific proxy service. A compromise in the hub cannot spread to the spokes. | **Good**. Provides network-level connectivity. By default, peering is bidirectional, increasing the attack surface. Requires careful Network Security Group (NSG) rules to restrict traffic. Higher risk of lateral movement. |
-| **Scalability & IP Mgmt.** | **Excellent**. Completely eliminates IP address conflicts. Each stamp VNet can use overlapping IP CIDR blocks (e.g., `10.1.0.0/16`) without issue. This is a massive advantage for a scalable stamp model. | **Poor**. Requires strict, centralized IP address management. Every new stamp VNet must have a unique IP CIDR block that does not overlap with the hub or any other peered spoke. This becomes a significant operational bottleneck at scale. |
-| **Cost** 💰 | **Higher**. Incurs hourly charges for each Private Endpoint and, more significantly, a per-GB data processing fee. `Cost = N * (PE_hourly) + Total_GB_processed`. | **Lower**. Incurs per-GB ingress/egress data transfer charges across peering links, which are generally cheaper than Private Link's processing fees. No hourly cost for the peering itself. |
-| **Source IP Preservation** | **Complex**. The source IP address seen by the proxy is a NAT'd IP from the Private Link Service's address range, **not** the original client IP. Preserving the original source IP requires enabling **Proxy Protocol v2** on the PLS, which must be supported by the transparent proxy. | **Simple**. The original client source IP from the stamp is preserved across the VNet peering link. This greatly simplifies logging, auditing, and applying source-based security policies on the proxy. |
-| **Ease of Integration** | **Moderate**. Requires creating a Private Endpoint and managing its DNS record in a Private DNS Zone. The connection is an approval workflow (consumer requests, provider approves). | **Moderate**. Requires creating a VNet peering link, which must be approved from both sides. The main challenge is securing a non-overlapping IP range beforehand. |
+Time-to-Propagation: All metadata changes (new tags, updates, deletions) must be reflected in Snowflake within a 15-minute SLA.
 
-### **Consequences of the Decision**
+Scalability: The system must handle a 10x growth in tables (from 1,000 to 10,000) over the next 18 months without requiring architectural redesign.
 
-* **Positive:**
-    * **Enhanced Security Posture**: We achieve superior network isolation, aligning with zero-trust security principles.
-    * **Future-Proof Scalability**: We can onboard new application stamps independently without the risk of IP address conflicts, removing a major operational hurdle.
-    * **Simplified Governance**: The architecture enforces a clean separation of duties; stamp teams do not need visibility into the hub's network layout, and vice-versa.
+6. Key Requirements & Acceptance Criteria
 
-* **Negative / To Be Mitigated:**
-    * **Increased Costs**: We accept the higher costs associated with Private Link data processing and per-endpoint fees. This must be factored into our cloud budget.
-    * **Proxy Configuration Complexity**: We must ensure our transparent proxy solution fully supports Proxy Protocol v2 to preserve the original client IP address for logging and security purposes. This will be a mandatory requirement for the proxy technology selection.
-    * **DNS Management**: A robust process for managing Private DNS Zones for the endpoints is required.
+To be considered successful, the solution must meet the following criteria for automation and scale:
 
-In Azure networking, **PLS** and an **ILB hub** are components that work together to provide secure, private access to your services. Here’s a breakdown of each concept.
+Automation Requirements:
 
-### **PLS (Private Link Service)**
+A1: Zero-Touch Propagation: The end-to-end process of detecting a change in Databricks and applying it in Snowflake must be fully automated with no human intervention.
 
-A **Private Link Service (PLS)** is the service you create to make your own application, running in your own Azure Virtual Network (VNet), available to other consumers privately. Think of it as creating your own private "version" of an Azure PaaS service (like Azure SQL or Azure Storage) that others can connect to without ever exposing your service to the public internet.
+A2: Dynamic Object Handling: The system must automatically detect and propagate tags for newly created tables, views, and columns without requiring manual registration or configuration.
 
-The core components are:
+A3: Full Lifecycle Sync: The framework must handle the creation, update, and deletion of tags and tag associations seamlessly.
 
-  * **Provider**: You, the owner of the service.
-  * **Service**: The application you want to share (e.g., a web API, a database).
-  * **Consumer**: Another VNet, perhaps belonging to a different team or even a different company, that needs to access your service.
+A4: Intelligent Error Handling: The solution must include automated retry logic for transient failures and send proactive alerts (e.g., via Slack/PagerDuty) to the platform team upon persistent synchronization failures.
 
-The PLS acts as a reference to your service. A consumer creates a **Private Endpoint** in their own VNet, which then requests a connection to your PLS. Once you approve it, traffic flows from the consumer's VNet directly to your service over Microsoft's private backbone network.
+Scalability & Performance Requirements:
 
------
+S1: High-Throughput Design: The system must be architected to process metadata for thousands of objects efficiently, avoiding full-catalog scans in favor of incremental or event-driven processing.
 
-### **ILB (Internal Load Balancer)**
+S2: Low Latency: The P95 latency for reflecting a single tag change in Snowflake must not exceed the 15-minute SLA.
 
-An **Internal Load Balancer (ILB)** is an Azure service that distributes network traffic to a set of backend resources (like virtual machines) *within* a virtual network. Unlike a public load balancer that has a public IP and accepts traffic from the internet, an ILB only has a private IP address from its VNet.
+S3: Resource Efficiency: The solution must operate with minimal computational overhead on both the Databricks and Snowflake platforms to manage costs effectively.
 
-Key characteristics of an ILB:
+S4: Extensibility: The core framework should be designed with extensibility in mind, allowing for the future addition of other metadata sources or destinations (e.g., Collibra, Power BI) with minimal rework.
 
-  * **Private IP Only**: It's not exposed to the public internet.
-  * **High Availability**: It ensures your internal applications are resilient by distributing traffic among healthy virtual machines.
-  * **Layer 4**: It operates at the transport layer, routing traffic based on TCP/UDP ports and IP addresses.
+7. Out of Scope for V1
 
------
+Bi-directional synchronization (Snowflake back to Databricks). Databricks Unity Catalog will remain the single source of truth for tags.
 
-### **How They Create an "ILB Hub"**
+Synchronization of other metadata types, such as table comments or user-defined properties, unless they are implemented via the tag system.
 
-The term "ILB hub" refers to a common architecture, typically in a [hub-and-spoke network topology](https://learn.microsoft.com/en-us/azure/architecture/reference-architectures/hybrid-networking/hub-spoke), where an ILB is used as the central point for exposing a shared service.
+A user interface for managing synchronization rules. All configuration will be managed as code.
 
-Here's how **PLS** and an **ILB** work together in this model:
 
-1.  **Service Hosting**: In the **hub VNet**, you deploy your shared application on a set of virtual machines (the backend pool).
-2.  **Internal Exposure**: You place an **Internal Load Balancer (ILB)** in front of these virtual machines. The ILB gets a private IP within the hub VNet (e.g., `10.0.1.100`) and distributes incoming traffic to your application VMs.
-3.  **Private Sharing**: To share this internal service securely with consumers in other VNets (the "spokes"), you create a **Private Link Service (PLS)** and associate it with the frontend IP configuration of the **ILB**.
-4.  **Consumer Connection**: A consumer in a spoke VNet creates a Private Endpoint, which connects to your PLS. This effectively maps a private IP in the spoke VNet directly to your ILB in the hub VNet.
 
-This "ILB Hub" architecture allows you to offer a shared, load-balanced service that is completely isolated from the internet and can be securely consumed by multiple other networks without complex VNet peering or concerns about overlapping IP addresses.
 
-This video explains how to securely provide services from within your private network using these technologies.
-\<br\>
-[](https://www.youtube.com/watch?v=h8od9fZKzRg "Azure Private Link Service Explained")
-http://googleusercontent.com/youtube_content/0
 
 
-Yes, **User-Defined Routes (UDRs) play a critical and mandatory role** in both architectures.
+The tags are not lost but we need to solve for making those tags available and applied to the right objects in Snowflake.
 
-Their primary function is to override Azure's default routing behavior to force traffic through the **transparent proxy** for inspection, logging, and policy enforcement. Without UDRs, traffic would bypass the proxy, defeating its purpose.
 
-Here’s how UDRs are applied in each scenario.
 
----
+Show thinking
+You're right to clarify. The challenge isn't that the tags are lost, but that they exist only in the Databricks ecosystem. The goal is to bridge this metadata gap by creating a pipeline that makes those tags available in Snowflake and applies them to the correct objects automatically and at scale.
 
-### **The Fundamental Role of the UDR**
+Here are the top three solution approaches to solve this tag propagation problem.
 
-A UDR is essentially a custom rule you add to a subnet's route table. It tells network traffic:
+## Approach 1: Event-Driven Propagation with Serverless Functions
+This approach uses cloud-native services to react to changes in Databricks in near real-time and apply them to Snowflake immediately.
 
-> "If you are trying to reach destination `X`, instead of following the default path, you **must** go to next-hop address `Y` first."
+How it Works:
 
-In our architectures, the "next-hop address `Y`" is always the private IP of the **transparent proxy's Internal Load Balancer (ILB)** in the hub VNet.
+Capture Events: Databricks Unity Catalog audit logs are configured to stream to a cloud storage location like AWS S3 or Azure Blob Storage. These logs contain detailed records of every metadata change, such as setTag on a specific table.
 
+Trigger Action: A serverless function (e.g., AWS Lambda or Azure Function) is automatically triggered whenever a new log file arrives.
 
-
----
-
-### **UDR in Option 2 (VNet Peering Model)**
-
-This is the most straightforward use case for a UDR.
-
-* **Where is the UDR applied?**
-    On the application **subnet within the spoke VNet**.
-* **What does it do?**
-    When an application in the spoke tries to connect to Snowflake, its destination is the IP address of the Snowflake Private Endpoint in the hub. By default, Azure would route this traffic directly over the VNet peering. The UDR intercepts this.
-* **The UDR Rule:**
-    * **Address Prefix**: The IP address of the Snowflake Private Endpoint in the hub (e.g., `10.0.2.10/32`).
-    * **Next Hop Type**: `Virtual Appliance`.
-    * **Next Hop IP Address**: The private IP of the transparent proxy's ILB in the hub (e.g., `10.0.1.100`).
-
-This rule effectively forces all traffic from the spoke that is destined for Snowflake to be detoured through the central proxy.
-
----
-
-### **UDR in Option 1 (Private Link Model)**
-
-The role of the UDR is slightly different here, and its placement shifts from the spoke to the hub.
-
-* **In the Spoke VNet:**
-    A UDR is **not needed in the spoke** for this specific flow. Traffic from the application is destined for the Private Endpoint *within its own VNet*. Azure's system routes automatically handle directing this traffic to the Private Link service without needing a UDR. This simplifies the configuration of the spoke VNet.
-
-* **Where is the UDR applied?**
-    On the **subnet where the transparent proxy resides within the hub VNet**. This is a crucial step.
-* **What does it do?**
-    1.  Traffic arrives at the proxy via the Private Link Service.
-    2.  The proxy inspects it and then forwards it to the final destination—the Snowflake Private Endpoint in the hub.
-    3.  A UDR is needed to ensure the proxy can correctly route traffic *back out* and to prevent routing loops. More importantly, it ensures that *any* traffic originating from within the hub and destined for Snowflake also goes through the proxy for consistent policy enforcement.
-* **The UDR Rule (on hub subnets):**
-    * **Address Prefix**: The IP address of the Snowflake Private Endpoint in the hub (e.g., `10.0.2.10/32`).
-    * **Next Hop Type**: `Virtual Appliance`.
-    * **Next Hop IP Address**: The private IP of the transparent proxy's ILB in the hub (e.g., `10.0.1.100`).
-    * **Important**: This UDR would be applied to all relevant subnets in the hub *except* the subnet containing the proxy itself, to prevent a routing loop where the proxy tries to send traffic to itself.
-
----
-
-### **Summary of UDR Placement**
-
-| Architecture | UDR Location | Purpose |
-| :--- | :--- | :--- |
-| **Option 1 (Private Link)** | **Hub VNet** | Ensures traffic processed by the proxy (and other hub resources) is correctly routed to the final Snowflake PE. Simplifies the spoke. |
-| **Option 2 (VNet Peering)** | **Spoke VNet** | Hijacks traffic destined for Snowflake and forces it to the proxy in the hub for inspection. |
-
-In short, you can't build these architectures without UDRs. They are the "traffic cops" that enforce the path through your security appliance.
+Apply Tags: The function parses the log to identify the table/column, the tag, and its value. It then connects to Snowflake and executes the necessary SQL commands (CREATE TAG IF NOT EXISTS, ALTER TABLE ... SET TAG) to apply the identical tag to the corresponding object.

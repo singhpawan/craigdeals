@@ -1,23 +1,5 @@
-														
-	Performance Implications													
-	"
-"													
-	Aspect	Native Snowflake Table	Catalog-Linked Table	Impact										
-	Query Speed	0.5 seconds	5-15 seconds	10-30x slower										
-	Caching	Full result cache	No result cache	Repeated queries slow										
-	Optimization	Full pruning	Limited pruning	More data scanned										
-	Cost	$0.001/query	$0.05/query	50x more expensive										
-														
-														
-														
-	Query Type | Time: seconds    	Table(cold) 	View(Cold)	Table(warm)	View(Warm)						 (warm) 	| 	View	 (warm)
-														
-	Simple SELECT       	0.8	1.2	0.05	0.05						sec     	| 		 sec
-	Complex JOIN        	5.1	18.3	0.12	4.2						sec     	| 		sec
-	Aggregation         	2.3	8.7	0.08	0.08						sec     	| 		 sec
-	Secure View         		24.1		23.8					N/A  	        	| 		 sec*
-														
-														
-														
-														
-														
+],
+Welcome to the data platform team! I'm [Your Name], the tech lead for our Snowflake component. I'm really glad to have you on board and looking forward to working together.
+I'd love to get you up to speed on our platform. I can walk you through some of the historical context around how we've built things, fill you in on some of the recent changes we've shipped, and make sure we're aligned on the priorities ahead. I think it'll be helpful to have that shared understanding as we move forward.
+Would you have time to grab a 30-45 minute meeting sometime later this week? I'm flexible on timing, so just let me know what works best for your schedule.
+Looking forward to connecting!

@@ -13,3 +13,31 @@ Recommendations:
 Our ADR (Architecture Decision Record) process exists to document trade-offs and build consensus on architectural decisions, helping us avoid unintended consequences and ensuring all perspectives are considered.
 Additionally, this was not a broken process requiring a fix, and the change diverts engineering capacity from our active priorities.
 I'd like to schedule a brief sync to discuss the rationale and evaluate whether consolidating back to the replication-based approach better serves our needs.
+
+
+
+
+
+
+
+Team,
+I want to address recent changes to our Snowflake account provisioning architecture that occurred while I was away. We need to align on our approach and decision-making process.
+What Happened:
+We moved from a replication-based deployment model to a hybrid approach combining replication groups and CI/CD pipelines for our account provisioning process.
+Technical Impact:
+
+Platform misalignment: Snowflake's architecture is purpose-built for replication-based deployments, providing atomic and consistent propagation. Our hybrid approach fragments this and works against proven platform patterns
+Operational cost: We now maintain two parallel deployment systems, increasing complexity, failure modes, and support burden
+Quality risk: Split deployment paths create opportunities for timing issues and state inconsistencies across environments
+
+Process Concern:
+This architectural decision bypassed our ADR process, which exists precisely for these situations—to evaluate trade-offs, surface concerns, and build informed consensus before we commit to infrastructure changes.
+More fundamentally: this wasn't solving an active problem. Our replication approach was working. Meanwhile, we have genuine priorities competing for the same engineering capacity this change consumed.
+Next Steps:
+I'm scheduling time this week to:
+
+Understand the drivers behind this decision
+Assess the full impact on our operations and roadmap
+Determine whether to proceed or consolidate back to our proven replication model
+
+I value everyone's input and want to land on the right solution—but we need to make these decisions together, following our established processes.

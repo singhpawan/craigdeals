@@ -1,43 +1,28 @@
-With regard to changes to our Snowflake account provisioning process, I understand some decisions were made while I was away, and I'd like to ensure we're all aligned moving forward.
-Background:
-Our original approach used replication groups to push features and utilities from a central org account to downstream accounts. The recent change split the provisioning process to use both replication groups and CI/CD pipelines for different aspects.
-Observations:
-From an engineering perspective, I have concerns about the hybrid approach:
+Dear [Executive Name],
+I'm writing to raise some concerns about the current Snowflake implementation that require your attention and guidance to ensure we maintain our platform architecture standards and deliver value effectively.
+Background
+The working group was established to [original objective]. However, the current trajectory of work under [consultancy name] is creating challenges that risk setting back our platform architecture and diluting our focus from critical deliverables.
+Key Concerns
+Priority Misalignment
+The current work focus has diverged from the working group's original charter. Most concerning is that the consultancy has deprioritized the network integration work—which was the original intention of this working group and is the only work required for the tenant migration. From our Snowflake architecture perspective, we have minimal impact from this tenant migration, limited solely to the network integration, which could be rebuilt in 1-2 days with effective collaboration. We have been simulating this work for our testing for the last few months and are ready to execute.
+Architectural Misalignment
+The consultancy is making foundational decisions that contradict our established platform architecture. Despite lacking Snowflake expertise within their team, they have proceeded without adhering to our Architecture Decision Record (ADR) process or adequately consulting the subject matter experts within the working group. Critically, their architectural decisions appear to be driven by what's easiest for them to implement rather than what's best for our overall platform architecture. This approach has forced us into substandard technical decisions that will have long-term consequences.
+Breakdown in Collaboration
+There's a concerning pattern of avoiding technical scrutiny. For example, after claiming to have a superior architecture proposal, the consultancy cancelled our scheduled review meeting where we were prepared to discuss gaps and technical considerations. Additionally, they've been reaching out to individual team members separately, creating information silos rather than fostering the collaborative environment needed for platform work.
+More troubling is that the consultancy has been discussing the team being "broken" before any direction from leadership. Given all the concerns outlined above, this narrative is not constructive for the long-term health of the Snowflake platform.
+Context on Our Team's Track Record
+I want to provide context on our team's capabilities. We are a small team of experts who have worked to create standardization across various iterations of our platform. We successfully migrated over 3.5PB of data and over 250 data products from FIS to WP data platform, while also building the WP data platform itself in less than 3 months—an effort that was originally estimated to take over 2 years. This track record demonstrates our team's technical expertise and ability to deliver complex platform work efficiently.
+Recommendation
+I recommend we refocus immediately on the network integration work and making the SDC robust. This aligns with the working group's original mandate and unblocks the tenant migration. Specifically:
 
-Departure from industry patterns: Snowflake and modern SaaS platforms use replication-based deployment models because they provide atomic, consistent propagation of changes. Fragmenting this works against the platform's design philosophy
-Architectural regression: Moving from unified replication to a hybrid model downgrades system elegance and operational simplicity
-Increased complexity: Maintaining two parallel deployment mechanisms introduces additional operational overhead and potential failure points
-Consistency risks: Different deployment methods can lead to timing or state inconsistencies across environments
+Network integration should be the top priority—this is the only required work for tenant migration and can be completed quickly with proper collaboration
+Continue focus on making the SDC robust to support our platform needs
+Establish a collaborative model where we work with the consultancy specifically on the Databricks-Snowflake integration/interface, with clear ownership boundaries
+Revisit certain integration decisions for the next migration to ensure we're building for long-term platform success rather than short-term convenience
+Clear direction and scope definition from leadership on what "leading platform integration" actually means
+Adherence to our established ADR process for all architectural decisions, with decisions made for platform benefit rather than implementation convenience
+Mandatory engagement with platform experts before implementation decisions
+Consolidated communication through the working group structure
 
-Recommendations:
-Our ADR (Architecture Decision Record) process exists to document trade-offs and build consensus on architectural decisions, helping us avoid unintended consequences and ensuring all perspectives are considered.
-Additionally, this was not a broken process requiring a fix, and the change diverts engineering capacity from our active priorities.
-I'd like to schedule a brief sync to discuss the rationale and evaluate whether consolidating back to the replication-based approach better serves our needs.
-
-
-
-
-
-
-
-Team,
-I want to address recent changes to our Snowflake account provisioning architecture that occurred while I was away. We need to align on our approach and decision-making process.
-What Happened:
-We moved from a replication-based deployment model to a hybrid approach combining replication groups and CI/CD pipelines for our account provisioning process.
-Technical Impact:
-
-Platform misalignment: Snowflake's architecture is purpose-built for replication-based deployments, providing atomic and consistent propagation. Our hybrid approach fragments this and works against proven platform patterns
-Operational cost: We now maintain two parallel deployment systems, increasing complexity, failure modes, and support burden
-Quality risk: Split deployment paths create opportunities for timing issues and state inconsistencies across environments
-
-Process Concern:
-This architectural decision bypassed our ADR process, which exists precisely for these situations—to evaluate trade-offs, surface concerns, and build informed consensus before we commit to infrastructure changes.
-More fundamentally: this wasn't solving an active problem. Our replication approach was working. Meanwhile, we have genuine priorities competing for the same engineering capacity this change consumed.
-Next Steps:
-I'm scheduling time this week to:
-
-Understand the drivers behind this decision
-Assess the full impact on our operations and roadmap
-Determine whether to proceed or consolidate back to our proven replication model
-
-I value everyone's input and want to land on the right solution—but we need to make these decisions together, following our established processes.
+I'm happy to provide additional technical details and would welcome the opportunity to discuss how we can course-correct while maintaining our relationship with [consultancy]. Our goal remains delivering a robust, well-architected solution—we just need the right guardrails, accountability, and focus on the original priorities to move forward effectively.
+Best regards,

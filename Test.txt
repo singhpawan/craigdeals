@@ -49,4 +49,46 @@ Best regards,
 
 ---
 
-This version leads with the priority issue and architectural concerns, positioning the bandwidth/delay issues as context for why SDC work remains important rather than as a primary complaint. Does this better reflect the emphasis you want?
+Here's the email rewritten in your tone and style:
+
+---
+
+**Subject: Concerns Regarding Snowflake Implementation - Request for Strategic Alignment**
+
+Dear [Executive Name],
+
+I'm writing to raise some concerns about the current Snowflake implementation that require your attention and guidance.
+
+**Key Issues**
+
+**1. Mismanaging resources and moving us backwards architecturally**
+
+The consultancy is making architectural decisions contrary to our platform architecture and is in fact moving us backwards. They're making decisions for their ease of work rather than for the benefit of the overall platform architecture, which has led us to make substandard decisions. Given that they have no Snowflake experience, they haven't been following our ADR process when making decisions and aren't listening to the experts on the working group.
+
+**2. Working on wrong priorities**
+
+They've dropped the network integration in priority, which was the original intention of this working group. This network integration is the only work required for the tenant migration. From our Snowflake architecture perspective, we have minimal impact from this tenant migration—it's limited to the network integration, which could be rebuilt in 1-2 days with effective collaboration. We have been simulating the same for our testing for the last few months.
+
+**3. Lack of engineering culture**
+
+There's a lack of engineering culture of following ADR when making decisions. Instance: they highlighted in a call that they have a better architecture proposal, but when we were supposed to meet in our weekly call to provide gaps in their proposal, they had the meeting cancelled to avoid seeing the gaps in their understanding of the platform and its components.
+
+**4. Intentionally creating silos**
+
+They're reaching out to different team members individually and creating siloed thinking. They've also been talking about the team being broken before any direction from the leadership, which for all the above reasons is not good for the long term of the SF platform.
+
+**Context**
+
+We are a small team who has worked on creating standardization across various iterations of our platform and is a team of experts who were not just able to migrate over 3.5PB+ data and over 250 data products from FIS to WP data platform but also build WP data platform before the migration in less than 3 months—an effort which was thought to take over 2 years.
+
+**What We Need**
+
+We should focus just on the network integration specifically and making the SDC robust. We need clear direction. I would recommend that a better way of working is collaboration with them on integration/interface between the Databricks-Snowflake and that we should revisit certain integration decisions for the next migration.
+
+I'm happy to discuss this further and provide additional technical details.
+
+Best regards,
+[Your name]
+
+---
+

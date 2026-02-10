@@ -1,94 +1,66 @@
-Here's the revised email with delays/bandwidth concerns moved to a supporting role:
+I wanted to bring everyone up to speed on a critical infrastructure change affecting our Voltage (DPaaS) integration across all data products on Snowflake. Given the tight timeline and cross-team dependencies, I'm setting up a coordination meeting tomorrow to align on our approach and execution plan.
 
----
 
-**Subject: Concerns Regarding Snowflake Implementation - Request for Strategic Alignment**
+Problem Statement
 
-Dear [Executive Name],
+The Voltage DPaaS root certificate authority has reached end-of-life and will no longer issue new certificates. Our current DPaaS certificates expire on February 27, 2026—less than three weeks away. The WP Crypto/Security team has already deployed the updated certificate to the Dev environment (January 28), which has broken all our dev Snowflake environments. The Worldpay platform team is planning to upgrade the certificate in production on February 17, before the certificates expire on February 27. We must deploy the updated Lambda module with the new certificates issued by the WP Cyber/Security team on or before February 17.
 
-I'm writing to raise some concerns about the current Snowflake implementation that require your attention and guidance to ensure we maintain our platform architecture standards and deliver value effectively.
+Business Risk: If we do not deploy the updated certificate by February 17, all DPaaS-integrated workloads will fail simultaneously in production Snowflake accounts. The recovery timeline would be unpredictable, as we would need to request emergency certificate issuance and coordinate deployment across multiple environments under pressure.
 
-**Background**
+Impact and Severity: This is a hard dependency for all data products consuming DPaaS services. The impact spans ingestion pipelines, transformation workloads, reporting systems, and any downstream analytics that depend on Voltage for data connectivity. We've already observed query failures in Dev, confirming that the old certificate is no longer accepted by the DPaaS Lambda. All production workloads on Snowflake will be affected on February 17 unless we complete the upgrade beforehand.
 
-The working group was established to [original objective]. However, the current trajectory of work under [consultancy name] is creating challenges that risk setting back our platform architecture and diluting our focus from critical deliverables.
 
-**Key Concerns**
+Upcoming Change
 
-**Priority Misalignment**
-The current work focus has diverged from the working group's original charter. Most concerning is that the consultancy has deprioritized the network integration work—which was the original intention of this working group and is the only work required for the tenant migration. From our Snowflake architecture perspective, we have minimal impact from this tenant migration, limited solely to the network integration, which could be rebuilt in 1-2 days with effective collaboration. We have been simulating this work for our testing for the last few months and are ready to execute.
+The WP Crypto/Security team is scheduled to formally upgrade and provide the new certificate on February 17, 2026.
 
-**Architectural Misalignment**
-The consultancy is making foundational decisions that contradict our established platform architecture. Despite lacking Snowflake expertise within their team, they have proceeded without adhering to our Architecture Decision Record (ADR) process or adequately consulting the subject matter experts within the working group. Critically, their architectural decisions appear to be driven by what's easiest for them to implement rather than what's best for our overall platform architecture. This approach has forced us into substandard technical decisions that will have long-term consequences.
 
-**Breakdown in Collaboration**
-There's a concerning pattern of avoiding technical scrutiny. For example, after claiming to have a superior architecture proposal, the consultancy cancelled our scheduled review meeting where we were prepared to discuss gaps and technical considerations. Additionally, they've been reaching out to individual team members separately, creating information silos rather than fostering the collaborative environment needed for platform work.
+Current State
 
-More troubling is that the consultancy has been discussing the team being "broken" before any direction from leadership. Given all the concerns outlined above, this narrative is not constructive for the long-term health of the Snowflake platform.
+Deployment and Infrastructure Gaps: The legacy Lambda function responsible for DPaaS connectivity was never migrated from the WP private repositories to the FIS GitHub account, leaving us without a proper build and deployment pipeline. There is no active Jenkins pipeline for building or deploying this Lambda, and our team's access is currently limited to the Dev AWS account only. The WP team retains access to the Prod AWS account. I have obtained access to the legacy code repositories and migrated the Lambda code to the FIS EDAI GitHub account.
 
-**Context on Our Team's Track Record**
+Proof of Concept and Validation: We attempted a local build in the standard development environment, but the process failed due to VPN certificate retrieval being blocked by Global Protect. However, one WP engineer (Sumanth) with an older development machine was able to successfully build the deployment package. This package was manually deployed to a single Dev WP EU Snowflake account, and we've confirmed that the new certificate functions correctly. This validates the overall approach but also exposes our current operational fragility. To avoid or minimize downtime, we will need to collaborate closely with the WP Crypto/Security team.
 
-I want to provide context on our team's capabilities. We are a small team of experts who have worked to create standardization across various iterations of our platform. We successfully migrated over 3.5PB of data and over 250 data products from FIS to WP data platform, while also building the WP data platform itself in less than 3 months—an effort that was originally estimated to take over 2 years. This track record demonstrates our team's technical expertise and ability to deliver complex platform work efficiently.
+Certificate and KeyStore Configuration: The current implementation loads certificates into the Java KeyStore as a single entry. The existing architecture does not leverage the KeyStore's native capability to maintain multiple certificate aliases simultaneously. This limitation might force us into an all-or-nothing cutover rather than a gradual, zero-downtime rotation strategy. Our research indicates that JKS (Java Key Store) can store multiple certificates. The WP platform team has chosen to replace the certificate rather than maintain both old and new simultaneously. We can work with them to explore supporting both old and new certificates during the migration on February 17.
 
-**Recommendation**
 
-I recommend we refocus immediately on the network integration work and making the SDC robust. This aligns with the working group's original mandate and unblocks the tenant migration. Specifically:
+Plan of Action
 
-- **Network integration** should be the top priority—this is the only required work for tenant migration and can be completed quickly with proper collaboration
-- Continue focus on **making the SDC robust** to support our platform needs
-- Establish a collaborative model where we work with the consultancy specifically on the **Databricks-Snowflake integration/interface**, with clear ownership boundaries
-- **Revisit certain integration decisions** for the next migration to ensure we're building for long-term platform success rather than short-term convenience
-- Clear direction and scope definition from leadership on what "leading platform integration" actually means
-- Adherence to our established ADR process for all architectural decisions, with decisions made for platform benefit rather than implementation convenience
-- Mandatory engagement with platform experts before implementation decisions
-- Consolidated communication through the working group structure
+Phase 1: Immediate Preparation (Tuesday–Wednesday)
+* Obtain the official certificate renewal package and upgrade instructions from the WP Crypto/Security team. We have the certificate for Dev and will request the same for production.
+* Audit the Lambda function's KeyStore configuration, which will inform our multi-certificate strategy.
+* Prepare the Lambda module with both the old and new certificates loaded into the KeyStore under distinct aliases (if supported). This approach allows the application to authenticate successfully regardless of which certificate the DPaaS service expects during the transition period. The Lambda's TLS client code should be reviewed to ensure it gracefully selects from available certificates or allows explicit alias configuration.
 
-I'm happy to provide additional technical details and would welcome the opportunity to discuss how we can course-correct while maintaining our relationship with [consultancy]. Our goal remains delivering a robust, well-architected solution—we just need the right guardrails, accountability, and focus on the original priorities to move forward effectively.
+Phase 2: Non-Production Testing (Wednesday)
+* Build the deployment package locally using the pre-validated approach. Once automated pipelines are established, this step can be eliminated, but we must work within current constraints.
+* Deploy to FISDEV (US) and validate that both certificates are present and the Lambda can successfully connect to Voltage. This dual-certificate deployment serves as a dress rehearsal for Prod and mitigates the risk of certificate mismatch errors.
+* Execute comprehensive testing of all downstream workloads that depend on DPaaS, including ingestion jobs, scheduled reports, and ad hoc queries. Any failures in Dev will trigger a critical review before we proceed to Prod.
 
-Best regards,
-[Your name]
+Phase 3: Production Deployment (February 16–17)
+* Coordinate with the WP team to deploy the dual-certificate Lambda to Worldpay US Prod and Ethos US Prod in a staggered fashion. This reduces the blast radius of any unforeseen issues and allows observation of the upgrade in lower-risk environments before completing the final rollout.
+* Monitor certificate validation logs and client connection patterns in Prod for 24 hours post-deployment to confirm stable operation.
+* Once we have confirmed stable dual-certificate operation for two weeks and the February 27 expiration date has passed, schedule a cleanup deployment that removes the old certificate alias from the KeyStore.
 
----
+I want to be direct about a gap in our current approach: we are executing this renewal in a reactive, manual fashion due to the absence of a proper deployment pipeline. However, we could explore creating a quick CI/CD pipeline to build the Lambda JAR and deploy it.
 
-Here's the email rewritten in your tone and style:
 
----
+Team
 
-**Subject: Concerns Regarding Snowflake Implementation - Request for Strategic Alignment**
+Execution Team:
+* WP Crypto/Security Team: Certificate generation, upgrade instructions, and rollback support
+* WP Data Platform Team: Access to Prod environments, Lambda deployment coordination
+* FIS Snowflake Platform Team: Dev environment testing, documentation, downstream workload validation
+* John and Harika have previous experience with DPaaS deployment, and their expertise will be crucial. (Please block your capacity accordingly.)
 
-Dear [Executive Name],
 
-I'm writing to raise some concerns about the current Snowflake implementation that require your attention and guidance.
+Resources
 
-**Key Issues**
+GitHub repository: FIS EDAI GitHub account (Lambda code migrated and ready for review)
 
-**1. Mismanaging resources and moving us backwards architecturally**
 
-The consultancy is making architectural decisions contrary to our platform architecture and is in fact moving us backwards. They're making decisions for their ease of work rather than for the benefit of the overall platform architecture, which has led us to make substandard decisions. Given that they have no Snowflake experience, they haven't been following our ADR process when making decisions and aren't listening to the experts on the working group.
+I know this is a tight timeline with multiple unknowns. The meeting tomorrow will serve to lock in commitments from each team, identify any blockers, and establish a single source of truth for progress tracking. Please come prepared to discuss your team's capacity and any constraints around access or coordination that might affect the schedule.
 
-**2. Working on wrong priorities**
-
-They've dropped the network integration in priority, which was the original intention of this working group. This network integration is the only work required for the tenant migration. From our Snowflake architecture perspective, we have minimal impact from this tenant migration—it's limited to the network integration, which could be rebuilt in 1-2 days with effective collaboration. We have been simulating the same for our testing for the last few months.
-
-**3. Lack of engineering culture**
-
-There's a lack of engineering culture of following ADR when making decisions. Instance: they highlighted in a call that they have a better architecture proposal, but when we were supposed to meet in our weekly call to provide gaps in their proposal, they had the meeting cancelled to avoid seeing the gaps in their understanding of the platform and its components.
-
-**4. Intentionally creating silos**
-
-They're reaching out to different team members individually and creating siloed thinking. They've also been talking about the team being broken before any direction from the leadership, which for all the above reasons is not good for the long term of the SF platform.
-
-**Context**
-
-We are a small team who has worked on creating standardization across various iterations of our platform and is a team of experts who were not just able to migrate over 3.5PB+ data and over 250 data products from FIS to WP data platform but also build WP data platform before the migration in less than 3 months—an effort which was thought to take over 2 years.
-
-**What We Need**
-
-We should focus just on the network integration specifically and making the SDC robust. We need clear direction. I would recommend that a better way of working is collaboration with them on integration/interface between the Databricks-Snowflake and that we should revisit certain integration decisions for the next migration.
-
-I'm happy to discuss this further and provide additional technical details.
+Looking forward to working through this together and achieving a successful upgrade.
 
 Best regards,
-[Your name]
-
----
-
+Pawan

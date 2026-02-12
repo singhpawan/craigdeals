@@ -1,66 +1,38 @@
-I wanted to bring everyone up to speed on a critical infrastructure change affecting our Voltage (DPaaS) integration across all data products on Snowflake. Given the tight timeline and cross-team dependencies, I'm setting up a coordination meeting tomorrow to align on our approach and execution plan.
+Subject: Risk Mitigation & Strategic Alignment: EDAI Snowflake Platform Ownership
 
+Leadership Team,
 
-Problem Statement
+I am fully supportive of the EDAI mission and committed to our teams' collective success. As we scale the EDAI (Azure/Databricks) platform, we have reached a critical juncture regarding Snowflake environment ownership. To ensure long-term stability, I want to highlight several significant concerns regarding technical debt, security, and operational continuity.
 
-The Voltage DPaaS root certificate authority has reached end-of-life and will no longer issue new certificates. Our current DPaaS certificates expire on February 27, 2026—less than three weeks away. The WP Crypto/Security team has already deployed the updated certificate to the Dev environment (January 28), which has broken all our dev Snowflake environments. The Worldpay platform team is planning to upgrade the certificate in production on February 17, before the certificates expire on February 27. We must deploy the updated Lambda module with the new certificates issued by the WP Cyber/Security team on or before February 17.
+1. Strategic Risks: Fragmentation and Technical Debt
+Architectural Drift: Managing two Snowflake environments under different teams will inevitably lead to fragmented standards, making long-term maintenance significantly more expensive.
 
-Business Risk: If we do not deploy the updated certificate by February 17, all DPaaS-integrated workloads will fail simultaneously in production Snowflake accounts. The recovery timeline would be unpredictable, as we would need to request emergency certificate issuance and coordinate deployment across multiple environments under pressure.
+Inefficient Engineering: We are observing a trend of "pushing problems downstream." Critical data issues (e.g., missing primary keys) are being addressed via inefficient Snowflake workarounds rather than being resolved at the Databricks source.
 
-Impact and Severity: This is a hard dependency for all data products consuming DPaaS services. The impact spans ingestion pipelines, transformation workloads, reporting systems, and any downstream analytics that depend on Voltage for data connectivity. We've already observed query failures in Dev, confirming that the old certificate is no longer accepted by the DPaaS Lambda. All production workloads on Snowflake will be affected on February 17 unless we complete the upgrade beforehand.
+Performance Bottlenecks: Specific architectural decisions—such as the use of SCD Global Lookup Tables and Dynamic Tables—have proven non-performant in our benchmark testing, even at low scale. Proceeding with this design will lead to immediate scaling bottlenecks and unpredictable consumption costs.
 
+2. Operational Dependencies & Expertise Gap
+Alignment Gap: There is a discrepancy between the perceived independence of the AA platform team and the daily reality of their dependency on the CDP Snowflake engineering team.
 
-Upcoming Change
+"Shadow Engineering": Despite the "no dependency" mandate, my team continues to provide daily, unrecorded support to the EDAI project.
 
-The WP Crypto/Security team is scheduled to formally upgrade and provide the new certificate on February 17, 2026.
+Resource Constraints & Retention: My team is currently operating at limited bandwidth due to three recent departures. Providing "shadow engineering" that is not accounted for in our PI planning jeopardizes our committed deliverables and negatively impacts the retention of our remaining talent.
 
+Execution Lag: Over the last two months, progress has been marginal, with several regressive changes made to the environment.
 
-Current State
+3. Security & Governance Concerns
+Risk Profile: Granting privileged access (AccountAdmin) to external contractors without a history of Snowflake administration creates a significant audit risk and violates the principle of least privilege.
 
-Deployment and Infrastructure Gaps: The legacy Lambda function responsible for DPaaS connectivity was never migrated from the WP private repositories to the FIS GitHub account, leaving us without a proper build and deployment pipeline. There is no active Jenkins pipeline for building or deploying this Lambda, and our team's access is currently limited to the Dev AWS account only. The WP team retains access to the Prod AWS account. I have obtained access to the legacy code repositories and migrated the Lambda code to the FIS EDAI GitHub account.
+Consistency: For context, we have historically denied this level of access even to experienced LEIT contractors who have been with the organization for a significant time.
 
-Proof of Concept and Validation: We attempted a local build in the standard development environment, but the process failed due to VPN certificate retrieval being blocked by Global Protect. However, one WP engineer (Sumanth) with an older development machine was able to successfully build the deployment package. This package was manually deployed to a single Dev WP EU Snowflake account, and we've confirmed that the new certificate functions correctly. This validates the overall approach but also exposes our current operational fragility. To avoid or minimize downtime, we will need to collaborate closely with the WP Crypto/Security team.
+4. Future Integration Costs
+Our ultimate goal is for the CDP and EDAI Snowflake environments to interoperate seamlessly. While independent execution may seem faster today, it creates "technical silos." Every week the EDAI platform operates under divergent standards adds weeks of future work required to make them compatible—work we are currently trying to minimize.
 
-Certificate and KeyStore Configuration: The current implementation loads certificates into the Java KeyStore as a single entry. The existing architecture does not leverage the KeyStore's native capability to maintain multiple certificate aliases simultaneously. This limitation might force us into an all-or-nothing cutover rather than a gradual, zero-downtime rotation strategy. Our research indicates that JKS (Java Key Store) can store multiple certificates. The WP platform team has chosen to replace the certificate rather than maintain both old and new simultaneously. We can work with them to explore supporting both old and new certificates during the migration on February 17.
+Recommendation
+To ensure the success of EDAI, we must formalize our "Ways of Working."
 
+If the AA team owns the platform, they must be fully self-sufficient and assume all operational risks.
 
-Plan of Action
+If my team is expected to ensure the platform’s success, we must have authority over its architecture and standards.
 
-Phase 1: Immediate Preparation (Tuesday–Wednesday)
-* Obtain the official certificate renewal package and upgrade instructions from the WP Crypto/Security team. We have the certificate for Dev and will request the same for production.
-* Audit the Lambda function's KeyStore configuration, which will inform our multi-certificate strategy.
-* Prepare the Lambda module with both the old and new certificates loaded into the KeyStore under distinct aliases (if supported). This approach allows the application to authenticate successfully regardless of which certificate the DPaaS service expects during the transition period. The Lambda's TLS client code should be reviewed to ensure it gracefully selects from available certificates or allows explicit alias configuration.
-
-Phase 2: Non-Production Testing (Wednesday)
-* Build the deployment package locally using the pre-validated approach. Once automated pipelines are established, this step can be eliminated, but we must work within current constraints.
-* Deploy to FISDEV (US) and validate that both certificates are present and the Lambda can successfully connect to Voltage. This dual-certificate deployment serves as a dress rehearsal for Prod and mitigates the risk of certificate mismatch errors.
-* Execute comprehensive testing of all downstream workloads that depend on DPaaS, including ingestion jobs, scheduled reports, and ad hoc queries. Any failures in Dev will trigger a critical review before we proceed to Prod.
-
-Phase 3: Production Deployment (February 16–17)
-* Coordinate with the WP team to deploy the dual-certificate Lambda to Worldpay US Prod and Ethos US Prod in a staggered fashion. This reduces the blast radius of any unforeseen issues and allows observation of the upgrade in lower-risk environments before completing the final rollout.
-* Monitor certificate validation logs and client connection patterns in Prod for 24 hours post-deployment to confirm stable operation.
-* Once we have confirmed stable dual-certificate operation for two weeks and the February 27 expiration date has passed, schedule a cleanup deployment that removes the old certificate alias from the KeyStore.
-
-I want to be direct about a gap in our current approach: we are executing this renewal in a reactive, manual fashion due to the absence of a proper deployment pipeline. However, we could explore creating a quick CI/CD pipeline to build the Lambda JAR and deploy it.
-
-
-Team
-
-Execution Team:
-* WP Crypto/Security Team: Certificate generation, upgrade instructions, and rollback support
-* WP Data Platform Team: Access to Prod environments, Lambda deployment coordination
-* FIS Snowflake Platform Team: Dev environment testing, documentation, downstream workload validation
-* John and Harika have previous experience with DPaaS deployment, and their expertise will be crucial. (Please block your capacity accordingly.)
-
-
-Resources
-
-GitHub repository: FIS EDAI GitHub account (Lambda code migrated and ready for review)
-
-
-I know this is a tight timeline with multiple unknowns. The meeting tomorrow will serve to lock in commitments from each team, identify any blockers, and establish a single source of truth for progress tracking. Please come prepared to discuss your team's capacity and any constraints around access or coordination that might affect the schedule.
-
-Looking forward to working through this together and achieving a successful upgrade.
-
-Best regards,
-Pawan
+With the proper guardrails and authority in place, we can collaborate effectively to ensure a high-performing, integrated data ecosystem.

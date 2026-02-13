@@ -1,38 +1,35 @@
-Subject: Risk Mitigation & Strategic Alignment: EDAI Snowflake Platform Ownership
 
-Leadership Team,
+This PI, we're managing two critical priorities in parallel: ensuring platform stability during a planned certificate upgrade and accelerating our data monetization roadmap. We've proven our DPaaS decommissioning playbook at scale (250+ products, 3.5PB in 3 months), and we're now enabling product teams to execute independently while expanding partnership capabilities with Equifax, Cognizant, and wealth management clients. By building composable frameworks—automated provisioning, ingestion, and observability
 
-I am fully supportive of the EDAI mission and committed to our teams' collective success. As we scale the EDAI (Azure/Databricks) platform, we have reached a critical juncture regarding Snowflake environment ownership. To ensure long-term stability, I want to highlight several significant concerns regarding technical debt, security, and operational continuity.
+PI Readout: "Scale Through Frameworks, Enable Through Infrastructure, Secure at Every Layer"
+Objective 1: Operational Continuity & Security
+Keep the platform stable and secure while strengthening our compliance posture
+* DPaaS Certificate Upgrade (Feb 17th) - managed 2-hour window, ~10min actual downtime
+* Splunk + Qradar SIEM integration (Big ID PoC validated)
+* Service user password deprecation (aligned with last year's human user deprecation)
+* BC/DR strategy for region failures
+* Compliance collaboration with Ops team on governance standards
+Objective 2: Product Enablement at Scale
+Expand data monetization and partnership capabilities through proven playbooks
+* DPaaS Migration Program: Scale WP playbook (250+ products, 3.5PB) → Enable Debit, Loyalty, Falcon teams to self-serve
+* Data Sharing Expansion: Equifax, Cognizant, Georgia Banking, TRP, Ethos (building on Mastercard, UBS, FHB relationships)
+* Card Pro team onboarding to CDP Snowflake (new consumption pattern)
+* Product team training & self-service enablement
+* Partner integration success metrics & revenue tracking
+Objective 3: Platform Frameworks for the Data Lifecycle
+Build composable, reusable infrastructure so product teams scale independently
+* Data Infrastructure Layer: Provisioning automation deployment + Fivetran landing pattern standardization
+* Data Movement Layer: Automated ingestion framework + tagging ontology definition with Platform team
+* Observability Layer: Enhanced monitoring + alerting framework (move beyond alerts-only)
+* Network Integration Redesign: Tenant migration support + ADR updates
+* Framework adoption & self-serve metrics
+Objective 4: Dual Platform Support & Transition
+Ensure seamless migration from legacy to new platform with zero disruption
+* Legacy platform maintenance & certificate management
+* New platform buildout with network/ADR refinement
+* Backward compatibility validation
+* Cross-platform testing & stability gates
+* Migration timeline & success criteria
 
-1. Strategic Risks: Fragmentation and Technical Debt
-Architectural Drift: Managing two Snowflake environments under different teams will inevitably lead to fragmented standards, making long-term maintenance significantly more expensive.
 
-Inefficient Engineering: We are observing a trend of "pushing problems downstream." Critical data issues (e.g., missing primary keys) are being addressed via inefficient Snowflake workarounds rather than being resolved at the Databricks source.
 
-Performance Bottlenecks: Specific architectural decisions—such as the use of SCD Global Lookup Tables and Dynamic Tables—have proven non-performant in our benchmark testing, even at low scale. Proceeding with this design will lead to immediate scaling bottlenecks and unpredictable consumption costs.
-
-2. Operational Dependencies & Expertise Gap
-Alignment Gap: There is a discrepancy between the perceived independence of the AA platform team and the daily reality of their dependency on the CDP Snowflake engineering team.
-
-"Shadow Engineering": Despite the "no dependency" mandate, my team continues to provide daily, unrecorded support to the EDAI project.
-
-Resource Constraints & Retention: My team is currently operating at limited bandwidth due to three recent departures. Providing "shadow engineering" that is not accounted for in our PI planning jeopardizes our committed deliverables and negatively impacts the retention of our remaining talent.
-
-Execution Lag: Over the last two months, progress has been marginal, with several regressive changes made to the environment.
-
-3. Security & Governance Concerns
-Risk Profile: Granting privileged access (AccountAdmin) to external contractors without a history of Snowflake administration creates a significant audit risk and violates the principle of least privilege.
-
-Consistency: For context, we have historically denied this level of access even to experienced LEIT contractors who have been with the organization for a significant time.
-
-4. Future Integration Costs
-Our ultimate goal is for the CDP and EDAI Snowflake environments to interoperate seamlessly. While independent execution may seem faster today, it creates "technical silos." Every week the EDAI platform operates under divergent standards adds weeks of future work required to make them compatible—work we are currently trying to minimize.
-
-Recommendation
-To ensure the success of EDAI, we must formalize our "Ways of Working."
-
-If the AA team owns the platform, they must be fully self-sufficient and assume all operational risks.
-
-If my team is expected to ensure the platform’s success, we must have authority over its architecture and standards.
-
-With the proper guardrails and authority in place, we can collaborate effectively to ensure a high-performing, integrated data ecosystem.

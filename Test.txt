@@ -1,35 +1,326 @@
 
-This PI, we're managing two critical priorities in parallel: ensuring platform stability during a planned certificate upgrade and accelerating our data monetization roadmap. We've proven our DPaaS decommissioning playbook at scale (250+ products, 3.5PB in 3 months), and we're now enabling product teams to execute independently while expanding partnership capabilities with Equifax, Cognizant, and wealth management clients. By building composable frameworks—automated provisioning, ingestion, and observability
-
-PI Readout: "Scale Through Frameworks, Enable Through Infrastructure, Secure at Every Layer"
-Objective 1: Operational Continuity & Security
-Keep the platform stable and secure while strengthening our compliance posture
-* DPaaS Certificate Upgrade (Feb 17th) - managed 2-hour window, ~10min actual downtime
-* Splunk + Qradar SIEM integration (Big ID PoC validated)
-* Service user password deprecation (aligned with last year's human user deprecation)
-* BC/DR strategy for region failures
-* Compliance collaboration with Ops team on governance standards
-Objective 2: Product Enablement at Scale
-Expand data monetization and partnership capabilities through proven playbooks
-* DPaaS Migration Program: Scale WP playbook (250+ products, 3.5PB) → Enable Debit, Loyalty, Falcon teams to self-serve
-* Data Sharing Expansion: Equifax, Cognizant, Georgia Banking, TRP, Ethos (building on Mastercard, UBS, FHB relationships)
-* Card Pro team onboarding to CDP Snowflake (new consumption pattern)
-* Product team training & self-service enablement
-* Partner integration success metrics & revenue tracking
-Objective 3: Platform Frameworks for the Data Lifecycle
-Build composable, reusable infrastructure so product teams scale independently
-* Data Infrastructure Layer: Provisioning automation deployment + Fivetran landing pattern standardization
-* Data Movement Layer: Automated ingestion framework + tagging ontology definition with Platform team
-* Observability Layer: Enhanced monitoring + alerting framework (move beyond alerts-only)
-* Network Integration Redesign: Tenant migration support + ADR updates
-* Framework adoption & self-serve metrics
-Objective 4: Dual Platform Support & Transition
-Ensure seamless migration from legacy to new platform with zero disruption
-* Legacy platform maintenance & certificate management
-* New platform buildout with network/ADR refinement
-* Backward compatibility validation
-* Cross-platform testing & stability gates
-* Migration timeline & success criteria
+CHANGE MANAGEMENT DOCUMENT
+Voltage Certificate Renewal & Lambda Module Deployment
 
 
 
+EXECUTIVE SUMMARY
+This document outlines the critical infrastructure change required to address the end-of-life status of Voltage servers and associated certificate expiration (deadline: February 27, 2025). The change encompasses certificate renewal, Lambda module updates, API Gateway configuration changes, and comprehensive pre/post-deployment testing using DPaaS lambda functions invoked from Snowflake.
+This is a coordinated effort requiring synchronized execution by distributed systems engineering, DevOps, and solution architecture teams with multiple stakeholders including US-based Snowflake platform team and UK-based Databricks integration team.
+Scope: Voltage certificate renewal, Lambda module rebuild and redeployment, API Gateway endpoint updates, comprehensive testing with production-like DPaaS test queries from Snowflake, and validation of end-to-end data flow integrity.
+
+TABLE OF CONTENTS
+1. Change Request Overview
+2. Pre-flight Checklist & Prerequisites
+3. Architecture & Dependency Analysis
+4. Detailed Deployment Procedures
+   4.1 Certificate Procurement & Validation
+   4.2 Lambda Module Build Process
+   4.3 API Gateway Configuration Updates
+   4.4 Deployment Execution
+5. Testing & Validation Strategy
+   5.1 Pre-deployment Testing
+   5.2 Post-deployment Testing
+   5.3 DPaaS Snowflake Integration Tests
+6. Rollback Procedures
+7. Success Criteria & Sign-off
+8. Appendices
+
+1. CHANGE REQUEST OVERVIEW
+1.1 Business Context & Problem Statement
+Voltage servers have reached end-of-life status, requiring immediate remediation before certificate expiration on February 27, 2025. Current Lambda modules that serve as integration points between Snowflake and downstream services depend on valid Voltage certificates for TLS authentication.
+This change addresses both the certificate renewal requirement and the architectural need to migrate to updated Lambda infrastructure with enhanced security posture and operational observability.
+1.2 Scope Definition
+Certificate procurement and validation for new Voltage infrastructure
+Build new Lambda module version with updated certificate dependencies
+Update API Gateway to point Lambda invocation to new endpoints
+Execute comprehensive pre and post-deployment testing
+Validate DPaaS integration via Snowflake test queries
+Document all changes for audit and compliance purposes
+1.3 Risk Assessment
+
+
+2. PRE-FLIGHT CHECKLIST & PREREQUISITES
+Complete all items below before scheduling deployment window:
+
+
+3. ARCHITECTURE & DEPENDENCY ANALYSIS
+3.1 Current Architecture
+The current integration architecture flows as follows:
+Snowflake DPaaS executes data product queries
+Lambda module (current version) receives invocation via API Gateway
+Lambda authenticates to Voltage servers using current certificate
+Response flows back through API Gateway to calling DPaaS process
+Data is processed and results returned to Snowflake consumers
+3.2 Dependent Systems
+
+
+4. DETAILED DEPLOYMENT PROCEDURES
+4.1 Certificate Procurement & Validation
+Objective: Obtain and validate new Voltage certificate before Lambda rebuild begins.
+Contact Voltage certificate provider
+Specify certificate must be ready by February 24 (3 days before deadline)
+Provide FQDN and alternate domain names
+Request certificate in PEM format (both cert and private key)
+Upon certificate receipt, validate certificate properties
+Verify certificate chain is complete: openssl verify -CAfile chain.pem cert.pem
+Check expiration date: openssl x509 -in cert.pem -noout -dates
+Validate CN/SAN matches Voltage endpoint FQDN
+Verify certificate key pair: openssl rsa -in key.pem -check
+Store certificate securely in AWS Secrets Manager
+Create secret: /voltage/tls/certificate
+Store both certificate and private key in JSON format
+Enable automatic rotation (if supported by Voltage)
+Document secret ARN for Lambda configuration
+Update Lambda environment variables to reference new secret
+Set VOLTAGE_CERT_SECRET_ARN=arn:aws:secretsmanager:...
+Update Lambda IAM role to include secretsmanager:GetSecretValue for new secret ARN
+4.2 Lambda Module Build Process
+Objective: Build new Lambda version with updated certificate dependencies and enhanced logging.
+Pull latest Lambda source from repository
+Branch: feature/voltage-certificate-renewal-{date}
+Ensure all code is reviewed and merged to main
+Update Lambda dependencies
+Update Node.js to latest LTS version (if not already current)
+Run npm audit fix to address security vulnerabilities
+Update certificate loading logic to use Secrets Manager
+Add debug logging for certificate loading and TLS handshake
+Update Lambda handler code
+Implement certificate refresh logic from Secrets Manager
+Add enhanced error handling with specific error codes
+Add X-Ray tracing for dependency calls
+Implement circuit breaker pattern for Voltage endpoint failures
+Update Lambda configuration
+Increase timeout if necessary (recommend 60 seconds minimum)
+Allocate sufficient memory (1024 MB recommended)
+Set ephemeral storage to 1 GB for build artifacts if needed
+Build and create deployment package
+npm install && npm test
+Validate all tests pass (>90% code coverage recommended)
+zip -r lambda-voltage-renewal.zip . (excluding node_modules/ and tests/)
+Test package locally with moto or localstack to validate Secrets Manager integration
+Create Lambda version and alias
+Upload package to AWS Lambda: aws lambda update-function-code --function-name dpaa-voltage-integration --zip-file fileb://lambda-voltage-renewal.zip
+Create new version: aws lambda publish-version --function-name dpaa-voltage-integration
+Update alias dpaa-voltage-prod to point to new version: aws lambda update-alias --function-name dpaa-voltage-integration --name prod --function-version {VERSION_NUMBER}
+4.3 API Gateway Configuration Updates
+Objective: Update API Gateway to route to new Lambda version without service interruption.
+Document current API Gateway configuration
+Export current integration configuration: aws apigateway get-integration --rest-api-id {API_ID} --resource-id {RESOURCE_ID} --http-method POST
+Document current Lambda alias ARN
+Screenshot current CloudWatch metrics and access patterns
+Update API Gateway integration
+Update Lambda invocation URI to new version: arn:aws:apigateway:region:lambda:path/2015-03-31/functions/{NEW_LAMBDA_ARN}:prod/invocations
+Keep all other settings unchanged (authorization, request/response mappings)
+Do NOT cache-bust if caching is enabled
+Deploy API Gateway stage
+Create deployment: aws apigateway create-deployment --rest-api-id {API_ID} --stage-name prod --stage-description 'Voltage certificate renewal'
+Validate deployment completed without errors
+Verify API Gateway routing
+Test with curl or Postman to ensure 200 OK response
+Verify request reaches correct Lambda version using CloudWatch Logs
+Check latency metrics are within acceptable range
+4.4 Deployment Execution Checklist
+Execute in sequence. Each step must complete successfully before proceeding.
+
+
+5. TESTING & VALIDATION STRATEGY
+Comprehensive testing occurs in three phases: pre-deployment validation, post-deployment smoke tests, and DPaaS integration verification.
+5.1 Pre-Deployment Testing
+Conduct these tests in staging environment before touching production:
+Certificate Validation Test
+Objective: Verify certificate is valid and not expired
+Command: openssl x509 -in new_cert.pem -noout -text | grep -E 'Not Before|Not After'
+Success Criteria: 'Not After' date is after February 27, 2025
+Lambda Local Build Test
+Objective: Verify Lambda builds successfully with new certificate
+Environment: Use AWS SAM or moto for local testing
+Test Command:
+sam build && sam local start-api
+curl -X POST http://localhost:3000/dpaa-voltage -d '{}'
+Success Criteria: HTTP 200 response with valid JSON
+TLS Handshake Test
+Objective: Verify Lambda can complete TLS handshake with Voltage
+Test Code: Node.js script using https.request() with new certificate
+Script validates certificate chain and hostname
+Success Criteria: Successful TLS 1.2+ connection; certificate verified
+Unit Test Suite Execution
+Command: npm test -- --coverage
+Success Criteria: All tests pass; >90% code coverage
+Integration Test with Staging Voltage Endpoint
+Objective: Full end-to-end test with staging Voltage
+Test: Invoke Lambda with sample DPaaS payload
+Success Criteria: Complete query within 30 seconds; data integrity verified
+5.2 Post-Deployment Smoke Tests
+Execute immediately after API Gateway deployment (within 5 minutes):
+API Gateway Health Check
+Test: curl -X GET https://api.example.com/health
+Success Criteria: HTTP 200; response time <500ms
+Lambda Invocation from API Gateway
+Test: Send minimal valid DPaaS request through API Gateway
+Success Criteria: HTTP 200; Lambda processes request successfully
+Error Handling Validation
+Test: Send invalid requests to ensure error responses are appropriate
+Success Criteria: HTTP 4xx/5xx with descriptive error messages
+Latency Verification
+Test: 10 sequential requests through API Gateway
+Success Criteria: p50 latency <2 seconds; p99 <5 seconds
+5.3 DPaaS Snowflake Integration Tests
+These tests validate end-to-end integration from Snowflake DPaaS through Lambda to Voltage backend:
+Pre-Migration Test (Run Before Deployment)
+Execute existing DPaaS query using current Lambda version
+Document result set and execution time
+Example Snowflake Query:
+SELECT COUNT(*), AVG(execution_time_ms) FROM dpaa_voltage_results WHERE query_date = CURRENT_DATE()
+Success Criteria: Query completes; baseline metrics captured
+Immediate Post-Deployment Test (T+5 minutes)
+Execute identical DPaaS query using new Lambda version
+Compare result set with pre-deployment baseline
+Check execution time is within 10% of baseline
+Success Criteria: Result set matches; execution time acceptable
+Extended Load Test (T+1 hour)
+Execute 20 sequential DPaaS queries at rate of 1 per minute
+Monitor Lambda CloudWatch metrics for anomalies
+Check for any error responses or timeouts
+Success Criteria: 100% success rate; consistent performance
+Snowflake Data Validation Test (T+4 hours)
+Execute complex multi-join query against DPaaS results
+Validate data quality, completeness, and referential integrity
+Example Query:
+SELECT COUNT(*) AS total_records, COUNT(DISTINCT id) AS unique_ids FROM (SELECT * FROM dpaa_voltage_results WHERE created_at > CURRENT_TIMESTAMP() - INTERVAL '4 HOURS') WHERE data_quality_check = TRUE
+Success Criteria: All data validation checks pass
+Cross-Team Stakeholder Sign-off
+Snowflake platform team confirms all metrics normal
+Databricks integration team confirms no downstream impact
+Data consumers acknowledge query results are expected
+Success Criteria: Written approval from all stakeholders
+
+6. ROLLBACK PROCEDURES
+Execute rollback only if post-deployment testing identifies critical failures. Rollback must return system to pre-deployment state within 30 minutes.
+6.1 Rollback Triggers
+Initiate rollback if any of the following occur:
+Lambda error rate exceeds 5% for more than 2 minutes
+API Gateway latency p99 exceeds 10 seconds
+Snowflake DPaaS queries fail with certificate/authentication errors
+Voltage backend rejects requests due to certificate issues
+Any data integrity issue detected during post-deployment tests
+6.2 Rollback Steps
+Notification (T+0 minutes)
+Alert DevOps Lead and Solutions Architect of failure
+Send Slack message to #critical-incidents with specific failure details
+Brief stakeholders: 'Rollback in progress due to [specific issue]'
+Stop New Requests (T+1 minute)
+Immediately throttle API Gateway to prevent new DPaaS invocations
+Set API Gateway rate limit to 0 for voltage-integration resource
+Revert API Gateway (T+2 minutes)
+Update API Gateway integration to point to previous Lambda version
+Command: aws lambda update-alias --function-name dpaa-voltage-integration --name prod --function-version {PREVIOUS_VERSION_NUMBER}
+Deploy changes: aws apigateway create-deployment --rest-api-id {API_ID} --stage-name prod
+Restore Previous Certificate (T+5 minutes)
+Revert Secrets Manager secret to previous certificate version
+Command: aws secretsmanager restore-secret-version --secret-id /voltage/tls/certificate --version-id {PREVIOUS_VERSION_ID}
+Verify Rollback Success (T+10 minutes)
+Test API Gateway endpoint: curl -X POST https://api.example.com/dpaa-voltage -d '{}'
+Verify CloudWatch Logs show successful invocations with previous Lambda version
+Run single DPaaS Snowflake query to confirm connectivity
+Resume Normal Operations (T+15 minutes)
+Remove API Gateway rate limit restriction
+Resume accepting normal request volume
+Monitor error rates for 30 minutes
+Post-Rollback Analysis (T+30 minutes)
+Capture all logs from failure window for root cause analysis
+Schedule post-incident review with engineering and DevOps teams
+Document lessons learned and remediation actions
+
+7. SUCCESS CRITERIA & SIGN-OFF
+7.1 Deployment Success Criteria
+The change is considered successful only when ALL the following criteria are met:
+Technical Criteria
+New Lambda version successfully deployed and accessible via API Gateway
+API Gateway routes all requests to new Lambda version
+New Voltage certificate is valid and not expired
+Lambda successfully authenticates to Voltage using new certificate
+All pre-deployment and post-deployment tests pass
+Functional Criteria
+DPaaS queries execute successfully and return expected results
+Data integrity validated across result sets
+No regression in query performance (latency within 10% of baseline)
+Error handling works as designed for failure scenarios
+Operational Criteria
+CloudWatch Logs and Metrics show normal operation
+X-Ray traces show expected service dependencies
+No unusual error patterns or anomalies detected
+Monitoring and alerting are functioning correctly
+Stakeholder Criteria
+Snowflake platform team confirms no issues
+UK Databricks team confirms no integration disruption
+Data product owners acknowledge results are accurate
+Security team confirms certificate meets requirements
+7.2 Sign-off Documentation
+Obtain written sign-off from the following parties before considering deployment complete:
+
+
+8. APPENDICES
+8.1 Contact Information & Escalation Path
+
+
+8.2 Certificate Validation Checklist
+Voltage Certificate Properties
+Subject CN: [voltage.example.com]
+Subject Alternative Names: [list all domain variants]
+Issuer: [Certificate Authority]
+Valid From: [date]
+Valid Until: [date - must be after Feb 27, 2025]
+Key Size: [2048 or 4096 bit RSA]
+Signature Algorithm: [sha256WithRSAEncryption]
+Verification Command: openssl verify -CAfile chain.pem cert.pem
+Expected Output: cert.pem: OK
+8.3 Lambda Configuration Parameters
+
+
+8.4 API Gateway Endpoint Configuration
+Current Configuration:
+Resource: /dpaa-voltage
+Method: POST
+Authorization: API Key (header: X-API-Key)
+Lambda Alias: dpaa-voltage-prod
+Stage: prod
+New Configuration (Post-Deployment):
+Lambda Alias target: [new Lambda version number]
+All other settings remain unchanged
+8.5 Rollback Command Reference
+Keep these commands readily available for rapid execution if rollback is required:
+# Revert API Gateway Integration
+aws lambda update-alias --function-name dpaa-voltage-integration --name prod --function-version ORIGINAL_VERSION_NUMBER
+# Revert Secrets Manager Certificate
+aws secretsmanager restore-secret-version --secret-id /voltage/tls/certificate --version-id PREVIOUS_VERSION_ID
+# Deploy Previous API Gateway Configuration
+aws apigateway create-deployment --rest-api-id API_ID --stage-name prod --description 'Rollback to previous Lambda version'
+
+8.6 Test Query Examples for Snowflake DPaaS
+Use these exact queries for pre-deployment and post-deployment testing:
+Pre-Deployment Baseline Query:
+SELECT COUNT(*) as row_count, SUM(amount) as total_amount, AVG(execution_time_ms) as avg_latency FROM VOLTAGE_DPAA_RESULTS WHERE execution_date = CURRENT_DATE() AND status = 'SUCCESS'
+Immediate Post-Deployment Comparison:
+SELECT COUNT(*) as row_count, SUM(amount) as total_amount, AVG(execution_time_ms) as avg_latency FROM VOLTAGE_DPAA_RESULTS WHERE execution_date = CURRENT_DATE() AND status = 'SUCCESS' AND created_after_deployment_time = TRUE
+Data Integrity Validation:
+SELECT COUNT(DISTINCT transaction_id) as unique_transactions, COUNT(*) as total_rows, COUNT(CASE WHEN amount IS NULL THEN 1 END) as null_counts FROM VOLTAGE_DPAA_RESULTS WHERE execution_date = CURRENT_DATE() HAVING COUNT(*) > 0
+
+
+DOCUMENT CONTROL & REVISION HISTORY
+
+
+APPROVALS
+This document requires approval from the following before deployment:
+
+Senior Distributed Systems Engineer (Deployment Lead)
+Signature: ___________________________     Date: _______________
+
+DevOps Lead
+Signature: ___________________________     Date: _______________
+
+Solutions Architect
+Signature: ___________________________     Date: _______________
+
+Engineering Director
+Signature: ___________________________     Date: _______________

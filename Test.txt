@@ -1,99 +1,110 @@
-sql-- See all tasks that ran in a specific DAG execution
-SELECT NAME, STATE, SCHEDULED_TIME, COMPLETED_TIME, ERROR_MESSAGE
-FROM TABLE(INFORMATION_SCHEMA.TASK_HISTORY(
-    ROOT_TASK_ID => '<root_task_id>',
-    SCHEDULED_TIME_RANGE_START => DATEADD('day', -1, CURRENT_TIMESTAMP())
-))
-WHERE GRAPH_RUN_GROUP_ID = '<specific_group_id>'
-ORDER BY SCHEDULED_TIME;
-sql-- Compare durations across different DAG runs
-SELECT GRAPH_RUN_GROUP_ID,
-       MIN(SCHEDULED_TIME) AS dag_start,
-       MAX(COMPLETED_TIME) AS dag_end,
-       DATEDIFF('minute', dag_start, dag_end) AS total_duration_min,
-       COUNT(*) AS tasks_executed,
-       SUM(CASE WHEN STATE = 'FAILED' THEN 1 ELSE 0 END) AS failures
-FROM TABLE(INFORMATION_SCHEMA.TASK_HISTORY(
-    ROOT_TASK_ID => '<root_task_id>',
-    SCHEDULED_TIME_RANGE_START => DATEADD('day', -7, CURRENT_TIMESTAMP())
-))
-GROUP BY GRAPH_RUN_GROUP_ID
-ORDER BY dag_start DESC;
-In short: Think of GRAPH_RUN_GROUP_ID as a correlation ID for a single DAG execution — it ties together every task that participated in that particular run, making it easy to debug failures, measure end-to-end performance, and audit complete DAG executions.
-
-
-SELECT NAME, STATE, SCHEDULED_TIME, COMPLETED_TIME,
-       DATEDIFF('second', SCHEDULED_TIME, COMPLETED_TIME) AS duration_secs,
+Step 1: Get full query details
+sql-- Core query details
+SELECT QUERY_ID, QUERY_TEXT, QUERY_TYPE,
+       DATABASE_NAME, SCHEMA_NAME, WAREHOUSE_NAME, WAREHOUSE_SIZE,
+       EXECUTION_STATUS, ERROR_CODE, ERROR_MESSAGE,
+       START_TIME, END_TIME,
+       DATEDIFF('second', START_TIME, END_TIME) AS duration_secs,
+       TOTAL_ELAPSED_TIME,         -- in milliseconds
+       BYTES_SCANNED,
+       ROWS_PRODUCED,
+       ROWS_INSERTED, ROWS_UPDATED, ROWS_DELETED,
+       PARTITIONS_SCANNED, PARTITIONS_TOTAL,
+       BYTES_WRITTEN_TO_RESULT,
+       COMPILATION_TIME,
+       EXECUTION_TIME,
+       QUEUED_PROVISIONING_TIME,   -- time waiting for warehouse
+       QUEUED_OVERLOAD_TIME,       -- time queued due to overload
+       CREDITS_USED_CLOUD_SERVICES
+FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+WHERE QUERY_ID = '<your_query_id>';
+Step 2: Link the query ID back to its task run
+sql-- Find the task execution that produced this query
+SELECT NAME AS task_name,
+       DATABASE_NAME, SCHEMA_NAME,
+       STATE,
+       SCHEDULED_TIME, QUERY_START_TIME, COMPLETED_TIME,
+       DATEDIFF('second', QUERY_START_TIME, COMPLETED_TIME) AS actual_run_secs,
+       CONDITION_TEXT,        -- The WHEN condition
        ERROR_CODE, ERROR_MESSAGE,
        QUERY_ID,
-       CONDITION_TEXT,    -- Shows the WHEN condition defined on the task
-       GRAPH_RUN_GROUP_ID
+       GRAPH_RUN_GROUP_ID,
+       ROOT_TASK_ID,
+       ATTEMPT_NUMBER,
+       CONFIG                 -- Task config like warehouse, schedule
 FROM TABLE(INFORMATION_SCHEMA.TASK_HISTORY(
-    TASK_NAME => 'MY_ROOT_TASK',
-    SCHEDULED_TIME_RANGE_START => '2026-03-15'::TIMESTAMP_LTZ,
-    SCHEDULED_TIME_RANGE_END   => '2026-03-16'::TIMESTAMP_LTZ
+    SCHEDULED_TIME_RANGE_START => DATEADD('day', -7, CURRENT_TIMESTAMP())
 ))
-ORDER BY SCHEDULED_TIME DESC;
-
-
-Step 2: If STATE = SKIPPED (most likely cause)
-This means the task has a WHEN condition and it wasn't met:
-sql-- Check what the WHEN condition is
-SHOW TASKS LIKE 'MY_ROOT_TASK' IN SCHEMA my_db.my_schema;
-
--- Look at the "condition" column in the output
--- Common example: SYSTEM$STREAM_HAS_DATA('my_stream')
-Then verify the stream had no data at that time:
-sql-- Check if the stream currently has data
-SELECT SYSTEM$STREAM_HAS_DATA('my_stream');
-
--- Check stream metadata
-SHOW STREAMS LIKE 'my_stream' IN SCHEMA my_db.my_schema;
-Step 3: Check what happened to child tasks
-sql-- Use the GRAPH_RUN_GROUP_ID from Step 1
-SELECT NAME, STATE, SCHEDULED_TIME, COMPLETED_TIME,
-       DATEDIFF('second', SCHEDULED_TIME, COMPLETED_TIME) AS duration_secs,
-       ERROR_CODE, ERROR_MESSAGE
-FROM TABLE(INFORMATION_SCHEMA.TASK_HISTORY(
-    ROOT_TASK_ID => '<root_task_id>',
-    SCHEDULED_TIME_RANGE_START => '2026-03-15'::TIMESTAMP_LTZ,
-    SCHEDULED_TIME_RANGE_END   => '2026-03-16'::TIMESTAMP_LTZ
-))
-WHERE GRAPH_RUN_GROUP_ID = '<group_id_from_step1>'
-ORDER BY SCHEDULED_TIME;
-The child task behavior depends on the root task state:
-
-Root was SKIPPED → Child tasks never execute at all. They won't even appear in TASK_HISTORY for that GRAPH_RUN_GROUP_ID.
-Root FAILED → Child tasks also won't run (unless you've configured ALLOW_OVERLAPPING_EXECUTION or error handling).
-Root SUCCEEDED quickly → Child tasks will run, but they may also finish fast if there's no data to process.
-
-Step 4: Inspect the actual query that ran
-If the root task did execute (SUCCEEDED or FAILED), use the QUERY_ID to see exactly what happened:
-sql-- Check the query profile
+WHERE QUERY_ID = '<your_query_id>';
+The CONDITION_TEXT column here tells you exactly what WHEN condition was evaluated before the task ran.
+Step 3: Check if the condition query itself was logged
+When a task has a WHEN condition, Snowflake actually runs a separate query to evaluate it before the main query. You can find it:
+sql-- Look for the condition evaluation query
+-- It typically runs just before the main query, in the same session
+SELECT QUERY_ID, QUERY_TEXT, QUERY_TYPE,
+       EXECUTION_STATUS, START_TIME, END_TIME,
+       ROWS_PRODUCED
+FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+WHERE SESSION_ID = (
+    SELECT SESSION_ID
+    FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+    WHERE QUERY_ID = '<your_query_id>'
+)
+AND START_TIME BETWEEN
+    DATEADD('minute', -5, (
+        SELECT START_TIME FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+        WHERE QUERY_ID = '<your_query_id>'
+    ))
+    AND (
+        SELECT START_TIME FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+        WHERE QUERY_ID = '<your_query_id>'
+    )
+ORDER BY START_TIME;
+Step 4: Get the query profile (execution plan details)
+sql-- Execution plan breakdown
 SELECT *
-FROM TABLE(INFORMATION_SCHEMA.QUERY_HISTORY())
-WHERE QUERY_ID = '<query_id_from_step1>';
+FROM TABLE(GET_QUERY_OPERATOR_STATS('<your_query_id>'));
+This shows you every operator in the execution plan with stats like rows processed, bytes spilled, partitions scanned per operator — very useful for understanding why it was fast (e.g., pruned all partitions, empty source table).
+Step 5: Full picture — task run + all child tasks + condition
+sql-- First get the GRAPH_RUN_GROUP_ID and ROOT_TASK_ID
+SET graph_id = (
+    SELECT GRAPH_RUN_GROUP_ID
+    FROM TABLE(INFORMATION_SCHEMA.TASK_HISTORY(
+        SCHEDULED_TIME_RANGE_START => DATEADD('day', -7, CURRENT_TIMESTAMP())
+    ))
+    WHERE QUERY_ID = '<your_query_id>'
+);
 
--- Or for deeper analysis
-SELECT *
-FROM TABLE(INFORMATION_SCHEMA.QUERY_HISTORY_BY_SESSION())
-WHERE QUERY_ID = '<query_id_from_step1>';
-Step 5: Compare with a normal run
-sql-- Side-by-side: normal runs vs the short run
-SELECT GRAPH_RUN_GROUP_ID,
-       MIN(SCHEDULED_TIME) AS dag_start,
-       MAX(COMPLETED_TIME) AS dag_end,
-       DATEDIFF('minute', MIN(SCHEDULED_TIME), MAX(COMPLETED_TIME)) AS total_min,
-       COUNT(*) AS tasks_ran,
-       LISTAGG(DISTINCT STATE, ', ') AS states_seen
+-- Now get the entire DAG run
+SELECT NAME,
+       STATE,
+       CONDITION_TEXT,
+       SCHEDULED_TIME,
+       QUERY_START_TIME,
+       COMPLETED_TIME,
+       DATEDIFF('second', QUERY_START_TIME, COMPLETED_TIME) AS run_secs,
+       ERROR_MESSAGE,
+       QUERY_ID,
+       ATTEMPT_NUMBER
 FROM TABLE(INFORMATION_SCHEMA.TASK_HISTORY(
     ROOT_TASK_ID => '<root_task_id>',
     SCHEDULED_TIME_RANGE_START => DATEADD('day', -7, CURRENT_TIMESTAMP())
 ))
-GROUP BY GRAPH_RUN_GROUP_ID
-ORDER BY dag_start DESC;
-If you see one row with total_min = 0 and tasks_ran = 1 while others show total_min = 15 and tasks_ran = 5+, that confirms the root was skipped or failed before children could fire.
-Bottom line: The most common reason for a root task finishing in seconds is a WHEN condition (typically SYSTEM$STREAM_HAS_DATA) returning false, meaning there was no new data to process. When this happens, the entire DAG is skipped — no child tasks run at all. Opus 4.6Extended
-
-
-
+WHERE GRAPH_RUN_GROUP_ID = $graph_id
+ORDER BY SCHEDULED_TIME;
+Step 6: Check if the task was manually triggered vs scheduled
+sql-- The TRIGGERED_BY column (available in newer Snowflake versions)
+SELECT NAME, STATE, SCHEDULED_TIME,
+       CONDITION_TEXT,
+       QUERY_ID
+FROM SNOWFLAKE.ACCOUNT_USAGE.TASK_HISTORY
+WHERE QUERY_ID = '<your_query_id>'
+   OR GRAPH_RUN_GROUP_ID = (
+       SELECT GRAPH_RUN_GROUP_ID
+       FROM SNOWFLAKE.ACCOUNT_USAGE.TASK_HISTORY
+       WHERE QUERY_ID = '<your_query_id>'
+   )
+ORDER BY SCHEDULED_TIME;
+Quick interpretation guide:
+What you seeWhat it meansCONDITION_TEXT is not null + STATE = SKIPPEDWHEN condition was false, task didn't runCONDITION_TEXT is not null + STATE = SUCCEEDED + fast runCondition was true but query had no data to processROWS_PRODUCED = 0 and ROWS_INSERTED = 0The SQL ran but matched/inserted nothingPARTITIONS_SCANNED = 0Snowflake pruned everything — source had no relevant dataQUEUED_PROVISIONING_TIME is highWarehouse was suspended, time was spent spinning upChild tasks missing from DAG runRoot was skipped/failed, children never triggered
+This combination gives you complete observability — the condition that was evaluated, whether it passed, what the query actually did, and what happened downstream.

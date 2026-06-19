@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 import os
 from pathlib import Path
@@ -6,6 +8,7 @@ from flask import Flask, jsonify, render_template
 from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
 
+from .config import get_settings
 from .db import get_engine
 
 logger = logging.getLogger(__name__)
@@ -19,17 +22,27 @@ def create_app() -> Flask:
         template_folder=str(BASE_DIR / "templates"),
         static_folder=str(BASE_DIR / "static"),
     )
-    app.config["APP_URL"] = os.environ.get("APP_URL", "")
+    settings = get_settings()
+    app.config["APP_URL"] = settings.app_url
 
     @app.route("/")
     def index():
         return render_template("index.html")
 
+    @app.route("/health")
+    def health():
+        try:
+            with get_engine().connect() as conn:
+                conn.execute(text("SELECT 1"))
+            return jsonify(status="ok")
+        except Exception as exc:
+            logger.error("Health check failed: %s", exc)
+            return jsonify(status="error", detail=str(exc)), 503
+
     @app.route("/data")
     def data():
-        engine = get_engine()
         try:
-            with engine.connect() as conn:
+            with get_engine().connect() as conn:
                 result = conn.execute(
                     text(
                         """

@@ -9,6 +9,8 @@ Usage:
     python -m src.pricer real   # score live listings and write to DB
 """
 
+from __future__ import annotations
+
 import logging
 import sys
 
@@ -17,7 +19,8 @@ import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
 from sqlalchemy import text
 
-from .db import drop_if_exists, get_engine
+from .config import get_settings
+from .db import clear_table, get_engine
 from .utils import get_xval_indices
 
 logger = logging.getLogger(__name__)
@@ -39,6 +42,7 @@ def main(mode: str) -> None:
     if mode not in ("xval", "real"):
         raise ValueError("mode must be 'xval' or 'real'")
 
+    settings = get_settings()
     engine = get_engine()
 
     with engine.connect() as conn:
@@ -49,7 +53,7 @@ def main(mode: str) -> None:
                 "WHERE area = :area AND model = ANY(:models)"
             ),
             con=conn,
-            params={"area": "sfbay", "models": list(MODELS)},
+            params={"area": settings.craigslist_area, "models": list(MODELS)},
         )
 
     for col in ("year", "miles", "price"):
@@ -60,7 +64,6 @@ def main(mode: str) -> None:
     full = _exclude_outliers(full, "miles", 1_000, 250_000)
     full = _exclude_outliers(full, "price", 500, 75_000)
 
-    # Most recent NUM_ON_WEB listings per model are shown on the web UI
     full = full.sort_values("date", ascending=False).reset_index(drop=True)
     full["on_web"] = full.index < NUM_ON_WEB
 
@@ -74,7 +77,6 @@ def main(mode: str) -> None:
 
         logger.info("Pricing model: %s (%d records)", model, len(df))
 
-        # Training uses cars NOT shown on web to avoid leakage
         train = df[~df["on_web"]]
         test = df[df["on_web"]]
 
@@ -104,7 +106,7 @@ def main(mode: str) -> None:
     if mode == "real":
         delta_frame = pd.DataFrame(delta_rows)
         result = full.merge(delta_frame, on="url", how="inner")
-        drop_if_exists(engine, "priced")
+        clear_table(engine, "priced")
         result.to_sql("priced", engine, if_exists="append", index=False)
         logger.info("Wrote %d rows to 'priced'", len(result))
 

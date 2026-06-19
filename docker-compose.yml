@@ -7,7 +7,6 @@ services:
       POSTGRES_PASSWORD: craigdeals
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    # Bind to localhost only — app containers reach db over the internal network
     ports:
       - "127.0.0.1:5432:5432"
     healthcheck:
@@ -15,6 +14,14 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  migrate:
+    image: craigdeals:local
+    command: alembic upgrade head
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
 
   web:
     build: .
@@ -25,20 +32,24 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
 
-  # Run once to scrape listings: docker compose run --rm scraper
+  # docker compose run --rm scraper
   scraper:
     image: craigdeals:local
-    command: python -m src.scraper sfbay 500
+    command: python -m src.scraper
     env_file: .env
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     profiles:
       - tools
 
-  # Run once after scraping: docker compose run --rm pricer
+  # docker compose run --rm pricer
   pricer:
     image: craigdeals:local
     command: python -m src.pricer real
@@ -46,6 +57,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     profiles:
       - tools
 

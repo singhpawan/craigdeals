@@ -23,6 +23,7 @@ import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 
+from .config import get_settings
 from .db import get_engine
 from .utils import find_miles, find_model, find_phone, find_year
 
@@ -30,21 +31,14 @@ logger = logging.getLogger(__name__)
 
 MODELS_FILE = Path(__file__).parent.parent / "models.json"
 
-# Matches modern Craigslist listing hrefs:
-# /eby/cto/d/hayward-2017-honda/7941905565.html
 _LISTING_HREF_RE = re.compile(r"/\w{2,5}/ct[a-z]{1,3}/d/.+/\d+\.html")
 _PRICE_TEXT_RE = re.compile(r"^\$[\d,]+$")
 
-# Modern Craigslist paginates in steps of 120
 PAGE_SIZE = 120
-
-# Delay range between individual listing fetches (seconds)
 _MIN_DELAY = 1.5
 _MAX_DELAY = 4.0
-
-# Retry settings for 403/429 responses
 _MAX_RETRIES = 3
-_BACKOFF_BASE = 5  # seconds; doubles each retry
+_BACKOFF_BASE = 5
 
 
 class Scraper:
@@ -79,12 +73,7 @@ class Scraper:
             "Sec-Fetch-User": "?1",
         })
 
-    # ------------------------------------------------------------------
-    # Private helpers
-    # ------------------------------------------------------------------
-
     def _get(self, url: str, is_listing: bool = False) -> Optional[BeautifulSoup]:
-        """Fetch URL with retry/backoff on 403/429, random delay for listings."""
         if is_listing:
             time.sleep(random.uniform(_MIN_DELAY, _MAX_DELAY))
 
@@ -135,10 +124,6 @@ class Scraper:
             if text.startswith("Posted"):
                 return text.removeprefix("Posted").strip()
         return None
-
-    # ------------------------------------------------------------------
-    # Scraping logic
-    # ------------------------------------------------------------------
 
     def _process_listing(self, href: str, title: str, price: int) -> None:
         car_url = href if href.startswith("http") else self.url_root + href
@@ -213,12 +198,7 @@ class Scraper:
             except Exception:
                 logger.exception("Unexpected error processing listing %s", href)
 
-        # Pause between search pages
         time.sleep(random.uniform(2.0, 5.0))
-
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
 
     def scrape(self, num_posts: int) -> None:
         for start in range(0, num_posts, PAGE_SIZE):
@@ -234,8 +214,9 @@ class Scraper:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    area = sys.argv[1] if len(sys.argv) > 1 else "sfbay"
-    num_posts = int(sys.argv[2]) if len(sys.argv) > 2 else 500
+    settings = get_settings()
+    area = sys.argv[1] if len(sys.argv) > 1 else settings.craigslist_area
+    num_posts = int(sys.argv[2]) if len(sys.argv) > 2 else settings.num_posts
     scraper = Scraper(area)
     scraper.scrape(num_posts)
     scraper.save()

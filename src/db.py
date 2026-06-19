@@ -1,33 +1,31 @@
-import logging
-import os
-from typing import Optional
+from __future__ import annotations
 
-from sqlalchemy import create_engine, Engine, inspect, text
+import logging
+from functools import lru_cache
+
+from sqlalchemy import Engine, create_engine, inspect, text
+
+from .config import get_settings
 
 logger = logging.getLogger(__name__)
 
-_ALLOWED_TABLES = {"scraped", "priced"}
-
-_engine: Optional[Engine] = None
+_MANAGED_TABLES = {"scraped", "priced"}
 
 
+@lru_cache(maxsize=1)
 def get_engine() -> Engine:
-    global _engine
-    if _engine is None:
-        url = os.environ["DATABASE_URL"].replace("postgres://", "postgresql://", 1)
-        _engine = create_engine(url, pool_pre_ping=True)
-    return _engine
+    url = get_settings().database_url.replace("postgres://", "postgresql://", 1)
+    return create_engine(url, pool_pre_ping=True)
 
 
 def table_exists(engine: Engine, table_name: str) -> bool:
     return inspect(engine).has_table(table_name)
 
 
-def drop_if_exists(engine: Engine, table_name: str) -> None:
-    if table_name not in _ALLOWED_TABLES:
-        raise ValueError(f"Refusing to drop unknown table '{table_name}'")
-    if table_exists(engine, table_name):
-        with engine.connect() as conn:
-            conn.execute(text(f"DROP TABLE {table_name}"))
-            conn.commit()
-        logger.info("Dropped table %s", table_name)
+def clear_table(engine: Engine, table_name: str) -> None:
+    if table_name not in _MANAGED_TABLES:
+        raise ValueError(f"Refusing to clear unknown table '{table_name}'")
+    with engine.connect() as conn:
+        conn.execute(text(f"DELETE FROM {table_name}"))
+        conn.commit()
+    logger.info("Cleared table %s", table_name)

@@ -12,8 +12,10 @@ inspect the listing link href pattern and price element.
 
 import json
 import logging
+import random
 import re
 import sys
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -36,6 +38,14 @@ _PRICE_TEXT_RE = re.compile(r"^\$[\d,]+$")
 # Modern Craigslist paginates in steps of 120
 PAGE_SIZE = 120
 
+# Delay range between individual listing fetches (seconds)
+_MIN_DELAY = 1.5
+_MAX_DELAY = 4.0
+
+# Retry settings for 403/429 responses
+_MAX_RETRIES = 3
+_BACKOFF_BASE = 5  # seconds; doubles each retry
+
 
 class Scraper:
     def __init__(self, area: str) -> None:
@@ -52,27 +62,58 @@ class Scraper:
             ]
         )
         self._session = requests.Session()
-        self._session.headers["User-Agent"] = (
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/124.0.0.0 Safari/537.36"
-        )
+        self._session.headers.update({
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0.0.0 Safari/537.36"
+            ),
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "none",
+            "Sec-Fetch-User": "?1",
+        })
 
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _get(self, url: str) -> Optional[BeautifulSoup]:
-        try:
-            resp = self._session.get(url, timeout=15)
-            resp.raise_for_status()
-            return BeautifulSoup(resp.text, "html.parser")
-        except requests.RequestException as exc:
-            logger.warning("GET %s failed: %s", url, exc)
-            return None
+    def _get(self, url: str, is_listing: bool = False) -> Optional[BeautifulSoup]:
+        """Fetch URL with retry/backoff on 403/429, random delay for listings."""
+        if is_listing:
+            time.sleep(random.uniform(_MIN_DELAY, _MAX_DELAY))
+
+        for attempt in range(_MAX_RETRIES):
+            try:
+                resp = self._session.get(url, timeout=15)
+
+                if resp.status_code in (403, 429):
+                    wait = _BACKOFF_BASE * (2 ** attempt) + random.uniform(1, 3)
+                    logger.warning(
+                        "HTTP %d on %s — waiting %.0fs before retry %d/%d",
+                        resp.status_code, url, wait, attempt + 1, _MAX_RETRIES,
+                    )
+                    time.sleep(wait)
+                    continue
+
+                resp.raise_for_status()
+                return BeautifulSoup(resp.text, "html.parser")
+
+            except requests.RequestException as exc:
+                wait = _BACKOFF_BASE * (2 ** attempt)
+                logger.warning("GET %s failed: %s — retrying in %.0fs", url, exc, wait)
+                if attempt < _MAX_RETRIES - 1:
+                    time.sleep(wait)
+
+        logger.error("Giving up on %s after %d attempts", url, _MAX_RETRIES)
+        return None
 
     def _find_price_in_li(self, li) -> Optional[int]:
-        """Find the price from any text node inside a listing <li>."""
         for text in li.strings:
             t = text.strip()
             if _PRICE_TEXT_RE.match(t):
@@ -86,7 +127,6 @@ class Scraper:
         return None, None
 
     def _find_date(self, soup: BeautifulSoup) -> Optional[str]:
-        # <time datetime="2024-05-01 10:30"> or <span>Posted 2024-05-01 10:30</span>
         time_tag = soup.find("time")
         if time_tag:
             return time_tag.get("datetime") or time_tag.get_text(strip=True)
@@ -102,7 +142,7 @@ class Scraper:
 
     def _process_listing(self, href: str, title: str, price: int) -> None:
         car_url = href if href.startswith("http") else self.url_root + href
-        car_soup = self._get(car_url)
+        car_soup = self._get(car_url, is_listing=True)
         if car_soup is None:
             return
 
@@ -144,13 +184,11 @@ class Scraper:
         logger.info("Scraped: %d %s %d mi @ $%d", year, model, miles, price)
 
     def _process_search_page(self, start: int) -> None:
-        # Modern Craigslist search URL with pagination offset
         url = f"{self.url_root}/search/cta?start={start}"
         soup = self._get(url)
         if soup is None:
             return
 
-        # All listing links match the href pattern regardless of class names
         links = soup.find_all("a", href=_LISTING_HREF_RE)
         logger.info("Page start=%d: found %d listing links", start, len(links))
 
@@ -165,7 +203,6 @@ class Scraper:
             if not title:
                 continue
 
-            # Price is a sibling text node inside the enclosing <li>
             li = link.find_parent("li")
             price = self._find_price_in_li(li) if li else None
             if not price:
@@ -175,6 +212,9 @@ class Scraper:
                 self._process_listing(href, title, price)
             except Exception:
                 logger.exception("Unexpected error processing listing %s", href)
+
+        # Pause between search pages
+        time.sleep(random.uniform(2.0, 5.0))
 
     # ------------------------------------------------------------------
     # Public API

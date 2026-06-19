@@ -52,6 +52,10 @@ def main(mode: str) -> None:
             params={"area": "sfbay", "models": list(MODELS)},
         )
 
+    for col in ("year", "miles", "price"):
+        full[col] = pd.to_numeric(full[col], errors="coerce")
+    full = full.dropna(subset=["year", "miles", "price"]).reset_index(drop=True)
+
     full = _exclude_outliers(full, "year", 1990, 2030)
     full = _exclude_outliers(full, "miles", 1_000, 250_000)
     full = _exclude_outliers(full, "price", 500, 75_000)

@@ -1,0 +1,51 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: carsdb
+      POSTGRES_USER: craigdeals
+      POSTGRES_PASSWORD: craigdeals
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U craigdeals -d carsdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build: .
+    ports:
+      - "5000:5000"
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Run once to scrape listings: docker compose run --rm scraper
+  scraper:
+    build: .
+    command: python -m src.scraper sfbay 500
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+    profiles:
+      - tools
+
+  # Run once after scraping: docker compose run --rm pricer
+  pricer:
+    build: .
+    command: python -m src.pricer real
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+    profiles:
+      - tools
+
+volumes:
+  postgres_data:

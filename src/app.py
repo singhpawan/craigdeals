@@ -29,21 +29,25 @@ def create_app() -> Flask:
     @app.route("/data")
     def data():
         engine = get_engine()
-        with engine.connect() as conn:
-            result = conn.execute(
-                text(
-                    """
-                    SELECT * FROM priced
-                    WHERE date IN (
-                        SELECT date FROM priced
-                        WHERE model IN ('accord', 'civic', 'camry', 'corolla')
-                        ORDER BY date
+        try:
+            with engine.connect() as conn:
+                result = conn.execute(
+                    text(
+                        """
+                        SELECT * FROM priced
+                        WHERE date IN (
+                            SELECT date FROM priced
+                            WHERE model IN ('accord', 'civic', 'camry', 'corolla')
+                            ORDER BY date
+                        )
+                        ORDER BY delta DESC
+                        """
                     )
-                    ORDER BY delta DESC
-                    """
                 )
-            )
-            rows = [dict(row._mapping) for row in result]
+                rows = [dict(row._mapping) for row in result]
+        except Exception:
+            logger.warning("priced table not ready yet — run scraper then pricer")
+            rows = []
         return jsonify(items=rows)
 
     return app

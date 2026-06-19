@@ -1,15 +1,18 @@
+from __future__ import annotations
+
 """Craigslist scraper.
 
 Usage:
     python -m src.scraper [area] [num_posts]
 
-Note: Craigslist periodically changes its HTML structure. If results drop to
-zero, inspect the search page and update the CSS selectors in
-_process_search_page and _process_row accordingly.
+Craigslist periodically changes its HTML. The current selectors target the
+structure as of mid-2024. If results drop to zero, fetch a search page and
+inspect the listing link href pattern and price element.
 """
 
 import json
 import logging
+import re
 import sys
 from pathlib import Path
 from typing import Optional
@@ -24,6 +27,14 @@ from .utils import find_miles, find_model, find_phone, find_year
 logger = logging.getLogger(__name__)
 
 MODELS_FILE = Path(__file__).parent.parent / "models.json"
+
+# Matches modern Craigslist listing hrefs:
+# /eby/cto/d/hayward-2017-honda/7941905565.html
+_LISTING_HREF_RE = re.compile(r"/\w{2,5}/ct[a-z]{1,3}/d/.+/\d+\.html")
+_PRICE_TEXT_RE = re.compile(r"^\$[\d,]+$")
+
+# Modern Craigslist paginates in steps of 120
+PAGE_SIZE = 120
 
 
 class Scraper:
@@ -42,7 +53,9 @@ class Scraper:
         )
         self._session = requests.Session()
         self._session.headers["User-Agent"] = (
-            "Mozilla/5.0 (compatible; CraigDealsBot/1.0)"
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
         )
 
     # ------------------------------------------------------------------
@@ -58,45 +71,44 @@ class Scraper:
             logger.warning("GET %s failed: %s", url, exc)
             return None
 
+    def _find_price_in_li(self, li) -> Optional[int]:
+        """Find the price from any text node inside a listing <li>."""
+        for text in li.strings:
+            t = text.strip()
+            if _PRICE_TEXT_RE.match(t):
+                return int(t.replace("$", "").replace(",", ""))
+        return None
+
     def _find_lat_lon(self, soup: BeautifulSoup) -> tuple[Optional[float], Optional[float]]:
         tag = soup.find(id="map")
-        if tag:
+        if tag and tag.get("data-latitude"):
             return float(tag["data-latitude"]), float(tag["data-longitude"])
         return None, None
 
     def _find_date(self, soup: BeautifulSoup) -> Optional[str]:
-        tag = soup.find(id="display-date") or soup.find("time")
-        if tag:
-            return tag.get("datetime") or tag.get_text(strip=True)
+        # <time datetime="2024-05-01 10:30"> or <span>Posted 2024-05-01 10:30</span>
+        time_tag = soup.find("time")
+        if time_tag:
+            return time_tag.get("datetime") or time_tag.get_text(strip=True)
+        for span in soup.find_all("span"):
+            text = span.get_text(strip=True)
+            if text.startswith("Posted"):
+                return text.removeprefix("Posted").strip()
         return None
 
     # ------------------------------------------------------------------
     # Scraping logic
     # ------------------------------------------------------------------
 
-    def _process_row(self, row) -> None:
-        # Selectors cover both the legacy and modern Craigslist layouts
-        price_tag = row.find("span", class_="result-price") or row.find("span", class_="price")
-        title_tag = (
-            row.find("a", class_="result-title")
-            or (row.find("span", class_="pl") and row.find("span", class_="pl").find("a"))
-        )
-        if not price_tag or not title_tag:
-            return
-
-        title = title_tag.get_text(strip=True)
-        price_text = price_tag.get_text(strip=True).replace("$", "").replace(",", "")
-        if not price_text.isdigit():
-            return
-        price = int(price_text)
-
-        href = title_tag.get("href", "")
-        car_url = self.url_root + href if href.startswith("/") else href
+    def _process_listing(self, href: str, title: str, price: int) -> None:
+        car_url = href if href.startswith("http") else self.url_root + href
         car_soup = self._get(car_url)
         if car_soup is None:
             return
 
-        body_tag = car_soup.find(id="postingbody")
+        body_tag = car_soup.find(id="postingbody") or car_soup.find(
+            "section", {"class": lambda c: c and "postingbody" in c}
+        )
         body = body_tag.get_text(strip=True) if body_tag else ""
 
         model = find_model(title, self.models) or find_model(body, self.models)
@@ -118,46 +130,60 @@ class Scraper:
         self.df = pd.concat(
             [
                 self.df,
-                pd.DataFrame(
-                    [
-                        {
-                            "year": year, "model": model, "price": price,
-                            "miles": miles, "lat": lat, "lon": lon,
-                            "date": date, "area": self.area,
-                            "title": title, "body": body,
-                            "phone": phone, "image_count": image_count,
-                            "url": href,
-                        }
-                    ]
-                ),
+                pd.DataFrame([{
+                    "year": year, "model": model, "price": price,
+                    "miles": miles, "lat": lat, "lon": lon,
+                    "date": date, "area": self.area,
+                    "title": title, "body": body,
+                    "phone": phone, "image_count": image_count,
+                    "url": href,
+                }]),
             ],
             ignore_index=True,
         )
         logger.info("Scraped: %d %s %d mi @ $%d", year, model, miles, price)
 
-    def _process_search_page(self, page_index: int) -> None:
-        url = f"{self.url_root}/cta/index{page_index}.html"
+    def _process_search_page(self, start: int) -> None:
+        # Modern Craigslist search URL with pagination offset
+        url = f"{self.url_root}/search/cta?start={start}"
         soup = self._get(url)
         if soup is None:
             return
 
-        rows = soup.find_all("li", class_="result-row") or soup.find_all("p", class_="row")
-        logger.info("Page %d: found %d rows", page_index, len(rows))
+        # All listing links match the href pattern regardless of class names
+        links = soup.find_all("a", href=_LISTING_HREF_RE)
+        logger.info("Page start=%d: found %d listing links", start, len(links))
 
-        for row in rows:
+        seen: set[str] = set()
+        for link in links:
+            href = link.get("href", "")
+            if not href or href in seen:
+                continue
+            seen.add(href)
+
+            title = link.get_text(strip=True)
+            if not title:
+                continue
+
+            # Price is a sibling text node inside the enclosing <li>
+            li = link.find_parent("li")
+            price = self._find_price_in_li(li) if li else None
+            if not price:
+                continue
+
             try:
-                self._process_row(row)
+                self._process_listing(href, title, price)
             except Exception:
-                logger.exception("Unexpected error processing row")
+                logger.exception("Unexpected error processing listing %s", href)
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
     def scrape(self, num_posts: int) -> None:
-        for page_index in range(0, num_posts, 100):
-            logger.info("Scraping page index %d", page_index)
-            self._process_search_page(page_index)
+        for start in range(0, num_posts, PAGE_SIZE):
+            logger.info("Scraping page start=%d", start)
+            self._process_search_page(start)
         logger.info("Scraping complete — %d listings collected", len(self.df))
 
     def save(self) -> None:

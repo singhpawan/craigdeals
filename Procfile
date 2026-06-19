@@ -1,1 +1,1 @@
-web: gunicorn app:app --log-file -
+web: gunicorn "src.app:create_app()" --bind 0.0.0.0:$PORT --workers 2 --log-file -

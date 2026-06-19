@@ -60,3 +60,18 @@ target/
 
 #Ipython Notebook
 .ipynb_checkpoints
+
+# Environment / secrets
+.env
+*.env
+
+# Virtual environments
+venv/
+.venv/
+
+# Pickle / data artifacts
+*.pickle
+*.pickle.bak
+
+# OS artifacts
+.DS_Store

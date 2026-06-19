@@ -15,6 +15,7 @@ import sys
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
+from sqlalchemy import text
 
 from .db import drop_if_exists, get_engine
 from .utils import get_xval_indices
@@ -40,12 +41,16 @@ def main(mode: str) -> None:
 
     engine = get_engine()
 
-    full = pd.read_sql(
-        f"SELECT model, year, miles, price, url, body, title, date "
-        f"FROM scraped "
-        f"WHERE area='sfbay' AND model IN {tuple(MODELS)}",
-        con=engine,
-    )
+    with engine.connect() as conn:
+        full = pd.read_sql(
+            text(
+                "SELECT model, year, miles, price, url, body, title, date "
+                "FROM scraped "
+                "WHERE area = :area AND model = ANY(:models)"
+            ),
+            con=conn,
+            params={"area": "sfbay", "models": list(MODELS)},
+        )
 
     full = _exclude_outliers(full, "year", 1990, 2030)
     full = _exclude_outliers(full, "miles", 1_000, 250_000)

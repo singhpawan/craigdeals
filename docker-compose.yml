@@ -7,8 +7,9 @@ services:
       POSTGRES_PASSWORD: craigdeals
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    # Bind to localhost only — app containers reach db over the internal network
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U craigdeals -d carsdb"]
       interval: 5s
@@ -17,6 +18,7 @@ services:
 
   web:
     build: .
+    image: craigdeals:local
     ports:
       - "8080:5000"
     env_file: .env
@@ -27,7 +29,7 @@ services:
 
   # Run once to scrape listings: docker compose run --rm scraper
   scraper:
-    build: .
+    image: craigdeals:local
     command: python -m src.scraper sfbay 500
     env_file: .env
     depends_on:
@@ -38,7 +40,7 @@ services:
 
   # Run once after scraping: docker compose run --rm pricer
   pricer:
-    build: .
+    image: craigdeals:local
     command: python -m src.pricer real
     env_file: .env
     depends_on:

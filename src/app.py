@@ -4,6 +4,7 @@ from pathlib import Path
 
 from flask import Flask, jsonify, render_template
 from sqlalchemy import text
+from sqlalchemy.exc import ProgrammingError
 
 from .db import get_engine
 
@@ -20,8 +21,6 @@ def create_app() -> Flask:
     )
     app.config["APP_URL"] = os.environ.get("APP_URL", "")
 
-    logging.basicConfig(level=logging.INFO)
-
     @app.route("/")
     def index():
         return render_template("index.html")
@@ -35,18 +34,14 @@ def create_app() -> Flask:
                     text(
                         """
                         SELECT * FROM priced
-                        WHERE date IN (
-                            SELECT date FROM priced
-                            WHERE model IN ('accord', 'civic', 'camry', 'corolla')
-                            ORDER BY date
-                        )
+                        WHERE model IN ('accord', 'civic', 'camry', 'corolla')
                         ORDER BY delta DESC
                         """
                     )
                 )
                 rows = [dict(row._mapping) for row in result]
-        except Exception:
-            logger.warning("priced table not ready yet — run scraper then pricer")
+        except ProgrammingError:
+            logger.warning("priced table not ready — run scraper then pricer")
             rows = []
         return jsonify(items=rows)
 
